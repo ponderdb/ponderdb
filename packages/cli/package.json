@@ -1,0 +1,35 @@
+{
+  "name": "@ponderdb/cli",
+  "version": "0.1.0",
+  "description": "PonderDB CLI — terminal interface for memory management",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "ponder": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "tsx src/bin.ts",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@ponderdb/sdk": "0.1.0",
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ponderdb/ponderdb.git",
+    "directory": "packages/cli"
+  }
+}

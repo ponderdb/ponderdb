@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Integrations — Universal AI Memory Server</title>
+<style>
+  :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;--purple:#d2a8ff;--orange:#f0883e;--code-bg:#1c2128}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;padding:2rem;max-width:1200px;margin:0 auto}
+  h1{font-size:2rem;color:var(--accent);margin-bottom:0.5rem}
+  h2{font-size:1.4rem;color:var(--purple);margin-top:2.5rem;margin-bottom:1rem;border-bottom:1px solid var(--border);padding-bottom:0.5rem}
+  h3{font-size:1.1rem;color:var(--green);margin-top:1.5rem;margin-bottom:0.75rem}
+  p{margin-bottom:1rem}
+  table{width:100%;border-collapse:collapse;margin:1rem 0 1.5rem;font-size:0.85rem}
+  th{background:var(--surface);color:var(--accent);text-align:left;padding:0.6rem;border:1px solid var(--border);font-weight:600}
+  td{padding:0.5rem 0.6rem;border:1px solid var(--border)}
+  tr:nth-child(even){background:rgba(22,27,34,0.5)}
+  code{background:var(--code-bg);padding:0.1rem 0.35rem;border-radius:4px;font-size:0.83em;color:var(--orange)}
+  pre{background:var(--code-bg);padding:1rem;border-radius:8px;overflow-x:auto;margin:1rem 0;border:1px solid var(--border);font-size:0.8rem}
+  pre code{background:none;padding:0;color:var(--text)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin:1rem 0}
+  .highlight{background:rgba(88,166,255,0.08);border-left:3px solid var(--accent);padding:1rem 1.5rem;margin:1rem 0;border-radius:0 8px 8px 0}
+  .badge{display:inline-block;padding:0.15rem 0.5rem;border-radius:10px;font-size:0.72rem;font-weight:600}
+  .badge-green{background:rgba(63,185,80,0.15);color:var(--green)}
+  .badge-blue{background:rgba(88,166,255,0.15);color:var(--accent)}
+  .badge-orange{background:rgba(240,136,62,0.15);color:var(--orange)}
+  .badge-red{background:rgba(248,81,73,0.15);color:#f85149}
+  .nav{display:flex;gap:0.5rem;flex-wrap:wrap;margin:1rem 0 2rem}
+  .nav a{background:var(--surface);border:1px solid var(--border);padding:0.4rem 0.8rem;border-radius:8px;font-size:0.82rem;color:var(--accent);text-decoration:none}
+  .nav a:hover{background:rgba(88,166,255,0.1);border-color:var(--accent)}
+  .tool-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:1rem;margin:1.5rem 0}
+  .tool-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.25rem;position:relative}
+  .tool-card h3{margin-top:0;display:flex;align-items:center;gap:0.5rem}
+  .tool-card .config{color:var(--muted);font-size:0.8rem;margin-top:0.5rem}
+  .diagram{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:1.5rem;margin:1.5rem 0;font-family:monospace;white-space:pre;overflow-x:auto;font-size:0.8rem;line-height:1.35}
+  @media(max-width:768px){body{padding:1rem}.tool-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<h1>AI Tool Integrations</h1>
+<p style="color:var(--muted)">How every AI tool connects to Universal Memory via MCP</p>
+
+<div class="nav">
+  <a href="master-plan.html">&larr; Master Plan</a>
+  <a href="system-design.html">System Design</a>
+  <a href="database-storage.html">Database</a>
+  <a href="deployment-modes.html">Deployment</a>
+  <a href="pricing-performance.html">Pricing</a>
+</div>
+
+<div class="highlight">
+  <strong>MCP spec version <code>2025-11-25</code></strong> &mdash; One MCP server covers ~95% of developer AI tool market. Same config format works across Claude, Copilot, Cursor, Windsurf, Continue, Gemini CLI, and JetBrains.
+</div>
+
+<h2>Integration Architecture</h2>
+<div class="diagram">
+ AI Tools (Hosts)                       Universal Memory
++------------------+
+| Claude CLI       |---stdio---+
+| Claude Desktop   |---stdio---+
++------------------+           |     +-------------------+
++------------------+           +----&gt;|                   |
+| Cursor           |---stdio---+----&gt;|  MCP Server       |
+| Windsurf         |---stdio---+----&gt;|  (stdio + HTTP)   |
++------------------+           |     |                   |
++------------------+           |     |  Tools:           |
+| VS Code/Copilot  |---stdio---+     |   remember()      |
+| Continue.dev     |---stdio---+     |   recall()        |
++------------------+           |     |   search()        |
++------------------+           |     |   context()       |
+| Gemini CLI       |---stdio---+     |   forget()        |
+| JetBrains        |---stdio---+     +--------+----------+
++------------------+                          |
+                                              v
++------------------+                 +-------------------+
+| ChatGPT          |---HTTPS/OAuth--&gt;|  Memory API       |
++------------------+                 |  (REST + GraphQL) |
+                                     +--------+----------+
++------------------+                          |
+| Aider            |---proxy---------&gt;        |
+| Other tools      |---REST API------&gt;        |
++------------------+                          v
+                                     +-------------------+
+                                     | PostgreSQL+Qdrant |
+                                     | (local or cloud)  |
+                                     +-------------------+</div>
+
+<h2>Full Integration Matrix</h2>
+<table>
+  <tr><th>Tool</th><th>Method</th><th>MCP Features</th><th>Difficulty</th><th>Config Location</th></tr>
+  <tr>
+    <td><strong>Claude CLI / Desktop</strong></td>
+    <td>MCP</td>
+    <td><span class="badge badge-green">Full</span> Resources, Tools, Prompts, Roots, Elicitation</td>
+    <td><span class="badge badge-green">Easy</span></td>
+    <td><code>~/.claude.json</code></td>
+  </tr>
+  <tr>
+    <td><strong>VS Code / Copilot</strong></td>
+    <td>MCP</td>
+    <td><span class="badge badge-green">Full</span> Most complete client (all features)</td>
+    <td><span class="badge badge-green">Easy</span></td>
+    <td><code>.vscode/mcp.json</code></td>
+  </tr>
+  <tr>
+    <td><strong>Cursor</strong></td>
+    <td>MCP</td>
+    <td><span class="badge badge-green">Full</span> Tools, Prompts, Roots, Elicitation</td>
+    <td><span class="badge badge-green">Easy</span></td>
+    <td><code>.cursor/mcp.json</code></td>
+  </tr>
+  <tr>
+    <td><strong>Windsurf</strong></td>
+    <td>MCP</td>
+    <td><span class="badge badge-blue">Tools + Discovery</span></td>
+    <td><span class="badge badge-green">Easy</span></td>
+    <td><code>~/.codeium/windsurf/mcp_config.json</code></td>
+  </tr>
+  <tr>
+    <td><strong>Continue.dev</strong></td>
+    <td>MCP</td>
+    <td><span class="badge badge-green">Full</span> Resources, Tools, Prompts</td>
+    <td><span class="badge badge-green">Easy</span></td>
+    <td><code>~/.continue/config.json</code></td>
+  </tr>
+  <tr>
+    <td><strong>Gemini CLI</strong></td>
+    <td>MCP</td>
+    <td><span class="badge badge-blue">Tools + Prompts + Instructions</span></td>
+    <td><span class="badge badge-green">Easy</span></td>
+    <td><code>~/.gemini/settings.json</code></td>
+  </tr>
+  <tr>
+    <td><strong>JetBrains AI + Junie</strong></td>
+    <td>MCP</td>
+    <td><span class="badge badge-blue">Tools</span></td>
+    <td><span class="badge badge-green">Easy</span></td>
+    <td><code>~/.junie/mcp.json</code></td>
+  </tr>
+  <tr>
+    <td><strong>ChatGPT</strong></td>
+    <td>MCP (remote)</td>
+    <td><span class="badge badge-orange">Tools, Apps, DCR</span> HTTPS + OAuth required</td>
+    <td><span class="badge badge-orange">Medium</span></td>
+    <td>Web UI (Settings &rarr; Connections)</td>
+  </tr>
+  <tr>
+    <td><strong>Gemini Web/API</strong></td>
+    <td>No MCP</td>
+    <td><span class="badge badge-red">None</span> Use Function Calling API</td>
+    <td><span class="badge badge-red">Hard</span></td>
+    <td>N/A</td>
+  </tr>
+  <tr>
+    <td><strong>Aider</strong></td>
+    <td>Proxy / files</td>
+    <td><span class="badge badge-red">None</span> Inject via proxy or context files</td>
+    <td><span class="badge badge-red">Hard</span></td>
+    <td>Wrapper script</td>
+  </tr>
+  <tr>
+    <td><strong>Terminal / Scripts</strong></td>
+    <td>REST API / mcpc</td>
+    <td>Full API access</td>
+    <td><span class="badge badge-green">Easy</span></td>
+    <td>Shell / env vars</td>
+  </tr>
+</table>
+
+<h2>Tool Setup Configs</h2>
+
+<div class="tool-grid">
+  <div class="tool-card">
+    <h3>Claude CLI / Desktop</h3>
+    <pre><code>// ~/.claude.json or claude_desktop_config.json
+{
+  "mcpServers": {
+    "memory": {
+      "command": "npx",
+      "args": ["@universalmemory/mcp-server"],
+      "env": {
+        "MEMORY_API_KEY": "mem_sk_xxx"
+      }
+    }
+  }
+}</code></pre>
+  </div>
+  <div class="tool-card">
+    <h3>VS Code / Copilot</h3>
+    <pre><code>// .vscode/mcp.json
+{
+  "servers": {
+    "memory": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["@universalmemory/mcp-server"],
+      "env": {
+        "MEMORY_API_KEY": "${input:apiKey}"
+      }
+    }
+  }
+}</code></pre>
+  </div>
+  <div class="tool-card">
+    <h3>Cursor</h3>
+    <pre><code>// .cursor/mcp.json
+{
+  "mcpServers": {
+    "memory": {
+      "command": "npx",
+      "args": ["@universalmemory/mcp-server"],
+      "env": {
+        "MEMORY_API_KEY": "mem_sk_xxx"
+      }
+    }
+  }
+}</code></pre>
+  </div>
+  <div class="tool-card">
+    <h3>Windsurf</h3>
+    <pre><code>// ~/.codeium/windsurf/mcp_config.json
+{
+  "mcpServers": {
+    "memory": {
+      "command": "npx",
+      "args": ["@universalmemory/mcp-server"],
+      "env": {
+        "MEMORY_API_KEY": "mem_sk_xxx"
+      }
+    }
+  }
+}</code></pre>
+  </div>
+  <div class="tool-card">
+    <h3>Gemini CLI</h3>
+    <pre><code>// ~/.gemini/settings.json
+{
+  "mcpServers": {
+    "memory": {
+      "command": "npx",
+      "args": ["@universalmemory/mcp-server"],
+      "env": {
+        "MEMORY_API_KEY": "mem_sk_xxx"
+      }
+    }
+  }
+}</code></pre>
+  </div>
+  <div class="tool-card">
+    <h3>JetBrains Junie</h3>
+    <pre><code>// ~/.junie/mcp.json
+{
+  "mcpServers": {
+    "memory": {
+      "command": "npx",
+      "args": ["@universalmemory/mcp-server"],
+      "env": {
+        "MEMORY_API_KEY": "mem_sk_xxx"
+      }
+    }
+  }
+}</code></pre>
+  </div>
+</div>
+
+<h2>MCP Server Primitives</h2>
+<table>
+  <tr><th>Primitive</th><th>Controlled By</th><th>Purpose</th><th>Memory Server Example</th></tr>
+  <tr><td><strong>Tools</strong></td><td>Model (auto-invoked)</td><td>Functions LLM can call</td><td><code>remember</code>, <code>recall</code>, <code>search</code>, <code>context</code></td></tr>
+  <tr><td><strong>Resources</strong></td><td>Application</td><td>Read-only data (URI-addressable)</td><td><code>memory://snapshot</code>, <code>memory://categories</code></td></tr>
+  <tr><td><strong>Prompts</strong></td><td>User (explicit)</td><td>Reusable templates</td><td>"Recall all context for this project"</td></tr>
+</table>
+
+<h2>Available MCP SDKs</h2>
+<table>
+  <tr><th>Language</th><th>Tier</th><th>Package</th></tr>
+  <tr><td>TypeScript</td><td><span class="badge badge-green">Tier 1</span></td><td><code>@modelcontextprotocol/sdk</code></td></tr>
+  <tr><td>Python</td><td><span class="badge badge-green">Tier 1</span></td><td><code>mcp[cli]</code> (includes FastMCP)</td></tr>
+  <tr><td>C#</td><td><span class="badge badge-green">Tier 1</span></td><td>NuGet <code>ModelContextProtocol</code></td></tr>
+  <tr><td>Go</td><td><span class="badge badge-green">Tier 1</span></td><td><code>github.com/modelcontextprotocol/go-sdk</code></td></tr>
+  <tr><td>Java</td><td><span class="badge badge-blue">Tier 2</span></td><td>Maven <code>io.modelcontextprotocol:sdk</code></td></tr>
+  <tr><td>Rust</td><td><span class="badge badge-blue">Tier 2</span></td><td>Crate <code>mcp-sdk</code></td></tr>
+  <tr><td>Ruby, PHP, Swift, Kotlin</td><td>Tier 3</td><td>Community-maintained</td></tr>
+</table>
+
+<h2>Build Priority</h2>
+<table>
+  <tr><th>Priority</th><th>Integration</th><th>Effort</th><th>Impact</th></tr>
+  <tr><td><span class="badge badge-green">P0</span></td><td>MCP Server (covers 8+ tools)</td><td>1 week</td><td>Highest</td></tr>
+  <tr><td><span class="badge badge-green">P0</span></td><td>REST API</td><td>Built with server</td><td>Highest</td></tr>
+  <tr><td><span class="badge badge-green">P0</span></td><td>CLI Tool</td><td>1 week</td><td>High</td></tr>
+  <tr><td><span class="badge badge-blue">P1</span></td><td>TypeScript + Python SDKs</td><td>3 days each</td><td>High</td></tr>
+  <tr><td><span class="badge badge-blue">P1</span></td><td>VS Code Extension</td><td>1 week</td><td>Medium</td></tr>
+  <tr><td>P2</td><td>Proxy server (for Aider etc.)</td><td>3 days</td><td>Medium</td></tr>
+  <tr><td>P3</td><td>Browser Extension</td><td>2 weeks</td><td>Low</td></tr>
+</table>
+
+</body>
+</html>

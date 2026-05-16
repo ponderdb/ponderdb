@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Diagrams &amp; Workflows — Universal AI Memory Server</title>
+<style>
+  :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;--purple:#d2a8ff;--orange:#f0883e;--red:#f85149;--code-bg:#1c2128}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;padding:2rem;max-width:1400px;margin:0 auto}
+  h1{font-size:2rem;color:var(--accent);margin-bottom:0.5rem}
+  h2{font-size:1.5rem;color:var(--purple);margin-top:3rem;margin-bottom:1rem;border-bottom:1px solid var(--border);padding-bottom:0.5rem}
+  h3{font-size:1.15rem;color:var(--green);margin-top:1.5rem;margin-bottom:0.75rem}
+  p{margin-bottom:1rem;color:var(--muted)}
+  .nav{display:flex;gap:0.5rem;flex-wrap:wrap;margin:1rem 0 2rem}
+  .nav a{background:var(--surface);border:1px solid var(--border);padding:0.4rem 0.8rem;border-radius:8px;font-size:0.82rem;color:var(--accent);text-decoration:none}
+  .nav a:hover{background:rgba(88,166,255,0.1);border-color:var(--accent)}
+  .diagram-container{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:2rem;margin:1.5rem 0;overflow-x:auto}
+  .diagram-title{color:var(--accent);font-size:1rem;font-weight:600;margin-bottom:1rem}
+
+  /* SVG Diagrams */
+  svg text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif}
+  .box{fill:var(--surface);stroke:var(--border);stroke-width:2}
+  .box-accent{fill:rgba(88,166,255,0.1);stroke:var(--accent);stroke-width:2}
+  .box-green{fill:rgba(63,185,80,0.1);stroke:var(--green);stroke-width:2}
+  .box-purple{fill:rgba(210,168,255,0.1);stroke:var(--purple);stroke-width:2}
+  .box-orange{fill:rgba(240,136,62,0.1);stroke:var(--orange);stroke-width:2}
+  .arrow{stroke:var(--muted);stroke-width:2;fill:none;marker-end:url(#arrowhead)}
+  .arrow-accent{stroke:var(--accent);stroke-width:2;fill:none;marker-end:url(#arrowhead-accent)}
+  .arrow-green{stroke:var(--green);stroke-width:2;fill:none;marker-end:url(#arrowhead-green)}
+  .label{fill:var(--text);font-size:13px;font-weight:600}
+  .label-sm{fill:var(--muted);font-size:11px}
+  .label-accent{fill:var(--accent);font-size:13px;font-weight:600}
+
+  /* Flow cards */
+  .flow-row{display:flex;gap:0.5rem;align-items:stretch;flex-wrap:wrap;margin:1rem 0}
+  .flow-step{flex:1;min-width:150px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:0.75rem;text-align:center;position:relative}
+  .flow-step h4{color:var(--accent);font-size:0.85rem;margin-bottom:0.3rem}
+  .flow-step p{color:var(--muted);font-size:0.78rem;margin:0}
+  .flow-step .num{position:absolute;top:-8px;left:-8px;background:var(--accent);color:var(--bg);width:22px;height:22px;border-radius:50%;font-size:0.7rem;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .flow-arrow-h{display:flex;align-items:center;color:var(--accent);font-size:1.2rem;padding:0 0.25rem}
+
+  table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:0.85rem}
+  th{background:var(--surface);color:var(--accent);text-align:left;padding:0.6rem;border:1px solid var(--border)}
+  td{padding:0.5rem 0.6rem;border:1px solid var(--border)}
+  tr:nth-child(even){background:rgba(22,27,34,0.5)}
+  .highlight{background:rgba(88,166,255,0.08);border-left:3px solid var(--accent);padding:1rem 1.5rem;margin:1rem 0;border-radius:0 8px 8px 0}
+  code{background:var(--code-bg);padding:0.1rem 0.35rem;border-radius:4px;font-size:0.83em;color:var(--orange)}
+  @media(max-width:768px){body{padding:1rem}.flow-row{flex-direction:column}.flow-arrow-h{transform:rotate(90deg)}}
+</style>
+</head>
+<body>
+
+<!-- SVG Defs -->
+<svg width="0" height="0"><defs>
+  <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#8b949e"/></marker>
+  <marker id="arrowhead-accent" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#58a6ff"/></marker>
+  <marker id="arrowhead-green" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#3fb950"/></marker>
+</defs></svg>
+
+<h1>System Diagrams &amp; Workflows</h1>
+<p>Visual reference for architecture, data flows, user journeys, and deployment modes</p>
+
+<div class="nav">
+  <a href="master-plan.html">&larr; Master Plan</a>
+  <a href="system-design.html">System Design</a>
+  <a href="database-storage.html">Database</a>
+  <a href="ai-integrations.html">AI Integrations</a>
+</div>
+
+<!-- ==================== DIAGRAM 1: HIGH-LEVEL ARCHITECTURE ==================== -->
+<h2>1. High-Level System Architecture</h2>
+<div class="diagram-container">
+<svg viewBox="0 0 900 620" width="100%" height="auto">
+  <!-- Web Dashboard -->
+  <rect x="340" y="10" width="220" height="50" rx="8" class="box-accent"/>
+  <text x="450" y="40" text-anchor="middle" class="label-accent">Web Dashboard (Next.js)</text>
+
+  <!-- API Gateway -->
+  <rect x="320" y="90" width="260" height="45" rx="8" class="box"/>
+  <text x="450" y="118" text-anchor="middle" class="label">API Gateway / Load Balancer</text>
+  <line x1="450" y1="60" x2="450" y2="90" class="arrow-accent"/>
+
+  <!-- Three API servers -->
+  <rect x="50" y="170" width="200" height="50" rx="8" class="box-green"/>
+  <text x="150" y="200" text-anchor="middle" class="label">REST API Server</text>
+
+  <rect x="350" y="170" width="200" height="50" rx="8" class="box-green"/>
+  <text x="450" y="200" text-anchor="middle" class="label">MCP Server</text>
+
+  <rect x="650" y="170" width="200" height="50" rx="8" class="box-green"/>
+  <text x="750" y="200" text-anchor="middle" class="label">WebSocket Server</text>
+
+  <line x1="350" y1="135" x2="150" y2="170" class="arrow"/>
+  <line x1="450" y1="135" x2="450" y2="170" class="arrow"/>
+  <line x1="550" y1="135" x2="750" y2="170" class="arrow"/>
+
+  <!-- Service Layer -->
+  <rect x="150" y="260" width="600" height="70" rx="8" class="box-purple"/>
+  <text x="450" y="287" text-anchor="middle" class="label" style="fill:var(--purple)">Service Layer</text>
+  <text x="450" y="310" text-anchor="middle" class="label-sm">Memory | Search | Sync | Auth | Category | Notification</text>
+
+  <line x1="150" y1="220" x2="250" y2="260" class="arrow"/>
+  <line x1="450" y1="220" x2="450" y2="260" class="arrow"/>
+  <line x1="750" y1="220" x2="650" y2="260" class="arrow"/>
+
+  <!-- Databases -->
+  <rect x="50" y="380" width="200" height="65" rx="8" class="box-accent"/>
+  <text x="150" y="405" text-anchor="middle" class="label-accent">PostgreSQL</text>
+  <text x="150" y="425" text-anchor="middle" class="label-sm">+ pgvector (source of truth)</text>
+
+  <rect x="350" y="380" width="200" height="65" rx="8" class="box-green"/>
+  <text x="450" y="405" text-anchor="middle" class="label" style="fill:var(--green)">Qdrant</text>
+  <text x="450" y="425" text-anchor="middle" class="label-sm">Vector search (HNSW)</text>
+
+  <rect x="650" y="380" width="200" height="65" rx="8" class="box-orange"/>
+  <text x="750" y="405" text-anchor="middle" class="label" style="fill:var(--orange)">Redis / Valkey</text>
+  <text x="750" y="425" text-anchor="middle" class="label-sm">Cache + sessions + queue</text>
+
+  <line x1="300" y1="330" x2="150" y2="380" class="arrow"/>
+  <line x1="450" y1="330" x2="450" y2="380" class="arrow"/>
+  <line x1="600" y1="330" x2="750" y2="380" class="arrow"/>
+
+  <!-- Blob Storage -->
+  <rect x="50" y="490" width="200" height="50" rx="8" class="box"/>
+  <text x="150" y="520" text-anchor="middle" class="label">S3 / R2 (Blob Storage)</text>
+  <line x1="150" y1="445" x2="150" y2="490" class="arrow"/>
+
+  <!-- Background Queue -->
+  <rect x="350" y="490" width="200" height="50" rx="8" class="box"/>
+  <text x="450" y="520" text-anchor="middle" class="label">BullMQ (Job Queue)</text>
+  <line x1="750" y1="445" x2="750" y2="470" class="arrow"/>
+  <line x1="750" y1="470" x2="450" y2="470" class="arrow" style="stroke-dasharray:5,5"/>
+  <line x1="450" y1="470" x2="450" y2="490" class="arrow"/>
+
+  <!-- External connections -->
+  <text x="30" y="185" text-anchor="end" class="label-sm" style="fill:var(--green)">Web &amp; SDK</text>
+  <text x="330" y="185" text-anchor="end" class="label-sm" style="fill:var(--green)">AI Tools</text>
+  <text x="870" y="185" text-anchor="end" class="label-sm" style="fill:var(--green)">Real-time</text>
+
+  <!-- Legend -->
+  <rect x="650" y="490" width="200" height="110" rx="8" class="box" style="stroke-dasharray:4"/>
+  <text x="660" y="510" class="label-sm">Legend:</text>
+  <rect x="660" y="520" width="12" height="12" rx="2" style="fill:rgba(88,166,255,0.3)"/>
+  <text x="680" y="531" class="label-sm">Primary / Entry</text>
+  <rect x="660" y="540" width="12" height="12" rx="2" style="fill:rgba(63,185,80,0.3)"/>
+  <text x="680" y="551" class="label-sm">Application</text>
+  <rect x="660" y="560" width="12" height="12" rx="2" style="fill:rgba(210,168,255,0.3)"/>
+  <text x="680" y="571" class="label-sm">Service Layer</text>
+  <rect x="660" y="580" width="12" height="12" rx="2" style="fill:rgba(240,136,62,0.3)"/>
+  <text x="680" y="591" class="label-sm">Cache / Queue</text>
+</svg>
+</div>
+
+<!-- ==================== DIAGRAM 2: MEMORY WRITE FLOW ==================== -->
+<h2>2. Memory Write Flow</h2>
+<p>What happens when a memory is created (via API, MCP, or dashboard)</p>
+
+<div class="flow-row">
+  <div class="flow-step"><div class="num">1</div><h4>Request</h4><p>API / MCP / Dashboard sends create request</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step"><div class="num">2</div><h4>Auth + Rate Limit</h4><p>Validate API key, check quota, rate limit</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step"><div class="num">3</div><h4>Validate</h4><p>Input validation, generate key if missing</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step"><div class="num">4</div><h4>Auto-Categorize</h4><p>Keyword matching + embedding similarity</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step" style="border-color:var(--accent)"><div class="num" style="background:var(--green)">5</div><h4>Write to PostgreSQL</h4><p>Source of truth. Synchronous.</p></div>
+</div>
+<div class="flow-row">
+  <div class="flow-step"><div class="num">6</div><h4>Queue Embedding</h4><p>Async: generate 768d vector via BGE model</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step"><div class="num">7</div><h4>Upsert to Qdrant</h4><p>Vector + payload stored for semantic search</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step"><div class="num">8</div><h4>Invalidate Cache</h4><p>Redis cache for this key evicted</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step"><div class="num">9</div><h4>Notify</h4><p>WebSocket event + audit log entry</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step" style="border-color:var(--green)"><div class="num" style="background:var(--green)">10</div><h4>Response</h4><p>Return created memory to client</p></div>
+</div>
+
+<!-- ==================== DIAGRAM 3: SEARCH FLOW ==================== -->
+<h2>3. Hybrid Search Flow</h2>
+<p>How a search query finds the most relevant memories</p>
+
+<div class="diagram-container">
+<svg viewBox="0 0 900 400" width="100%" height="auto">
+  <!-- Query input -->
+  <rect x="350" y="10" width="200" height="40" rx="8" class="box-accent"/>
+  <text x="450" y="35" text-anchor="middle" class="label-accent">Search Query</text>
+
+  <!-- Embed -->
+  <rect x="350" y="80" width="200" height="40" rx="8" class="box-green"/>
+  <text x="450" y="105" text-anchor="middle" class="label">Generate Embedding</text>
+  <line x1="450" y1="50" x2="450" y2="80" class="arrow-accent"/>
+
+  <!-- Parallel paths -->
+  <rect x="50" y="160" width="220" height="55" rx="8" class="box-accent"/>
+  <text x="160" y="183" text-anchor="middle" class="label-accent">Qdrant</text>
+  <text x="160" y="200" text-anchor="middle" class="label-sm">Top-50 by cosine similarity</text>
+
+  <rect x="340" y="160" width="220" height="55" rx="8" class="box-purple"/>
+  <text x="450" y="183" text-anchor="middle" class="label" style="fill:var(--purple)">PostgreSQL FTS</text>
+  <text x="450" y="200" text-anchor="middle" class="label-sm">Top-50 by ts_rank</text>
+
+  <rect x="630" y="160" width="220" height="55" rx="8" class="box-orange"/>
+  <text x="740" y="183" text-anchor="middle" class="label" style="fill:var(--orange)">Metadata Filter</text>
+  <text x="740" y="200" text-anchor="middle" class="label-sm">Category + tags + source</text>
+
+  <line x1="350" y1="120" x2="160" y2="160" class="arrow"/>
+  <line x1="450" y1="120" x2="450" y2="160" class="arrow"/>
+  <line x1="550" y1="120" x2="740" y2="160" class="arrow"/>
+
+  <text x="250" y="145" class="label-sm" style="fill:var(--green)">PARALLEL</text>
+
+  <!-- Merge -->
+  <rect x="250" y="260" width="400" height="45" rx="8" class="box-green"/>
+  <text x="450" y="287" text-anchor="middle" class="label" style="fill:var(--green)">Reciprocal Rank Fusion + Recency Boost + Access Boost</text>
+
+  <line x1="160" y1="215" x2="350" y2="260" class="arrow"/>
+  <line x1="450" y1="215" x2="450" y2="260" class="arrow"/>
+  <line x1="740" y1="215" x2="550" y2="260" class="arrow"/>
+
+  <!-- Result -->
+  <rect x="350" y="340" width="200" height="40" rx="8" class="box-accent"/>
+  <text x="450" y="365" text-anchor="middle" class="label-accent">Top-K Results</text>
+  <line x1="450" y1="305" x2="450" y2="340" class="arrow-green"/>
+</svg>
+</div>
+
+<!-- ==================== DIAGRAM 4: DEPLOYMENT MODES ==================== -->
+<h2>4. Deployment Modes</h2>
+
+<h3>Local Mode (No Internet)</h3>
+<div class="diagram-container">
+<svg viewBox="0 0 700 280" width="100%" height="auto">
+  <rect x="10" y="10" width="680" height="260" rx="12" class="box" style="stroke-dasharray:6"/>
+  <text x="30" y="35" class="label-sm" style="fill:var(--green)">USER'S MACHINE</text>
+
+  <rect x="30" y="50" width="180" height="40" rx="6" class="box-accent"/>
+  <text x="120" y="75" text-anchor="middle" class="label-accent">CLI + MCP Server</text>
+
+  <rect x="240" y="50" width="180" height="40" rx="6" class="box-accent"/>
+  <text x="330" y="75" text-anchor="middle" class="label-accent">Web Dashboard</text>
+  <text x="330" y="68" text-anchor="middle" class="label-sm">localhost:3000</text>
+
+  <rect x="120" y="120" width="260" height="40" rx="6" class="box-green"/>
+  <text x="250" y="145" text-anchor="middle" class="label">Local API Server (Bun/Node)</text>
+
+  <line x1="120" y1="90" x2="200" y2="120" class="arrow"/>
+  <line x1="330" y1="90" x2="300" y2="120" class="arrow"/>
+
+  <rect x="30" y="190" width="150" height="55" rx="6" class="box-purple"/>
+  <text x="105" y="213" text-anchor="middle" class="label" style="fill:var(--purple)">SQLite</text>
+  <text x="105" y="230" text-anchor="middle" class="label-sm">memories + metadata</text>
+
+  <rect x="210" y="190" width="150" height="55" rx="6" class="box-purple"/>
+  <text x="285" y="213" text-anchor="middle" class="label" style="fill:var(--purple)">sqlite-vec</text>
+  <text x="285" y="230" text-anchor="middle" class="label-sm">vectors (&lt;1M)</text>
+
+  <rect x="480" y="120" width="190" height="55" rx="6" class="box-orange"/>
+  <text x="575" y="143" text-anchor="middle" class="label" style="fill:var(--orange)">Embedding Model</text>
+  <text x="575" y="160" text-anchor="middle" class="label-sm">BGE-small (120 MB, CPU)</text>
+
+  <line x1="200" y1="160" x2="105" y2="190" class="arrow"/>
+  <line x1="300" y1="160" x2="285" y2="190" class="arrow"/>
+  <line x1="380" y1="140" x2="480" y2="140" class="arrow" style="stroke-dasharray:4"/>
+
+  <text x="575" y="210" text-anchor="middle" class="label-sm">Requirements:</text>
+  <text x="575" y="228" text-anchor="middle" class="label-sm">512 MB RAM, 500 MB disk</text>
+  <text x="575" y="246" text-anchor="middle" class="label-sm" style="fill:var(--green)">No internet needed</text>
+</svg>
+</div>
+
+<h3>Hybrid Mode (Local + Cloud Sync)</h3>
+<div class="diagram-container">
+<svg viewBox="0 0 900 300" width="100%" height="auto">
+  <!-- Local -->
+  <rect x="10" y="10" width="380" height="280" rx="12" class="box" style="stroke-dasharray:6"/>
+  <text x="30" y="35" class="label-sm" style="fill:var(--green)">LOCAL (always available)</text>
+
+  <rect x="30" y="50" width="150" height="40" rx="6" class="box-purple"/>
+  <text x="105" y="75" text-anchor="middle" class="label" style="font-size:11px;fill:var(--purple)">SQLite (full copy)</text>
+
+  <rect x="210" y="50" width="150" height="40" rx="6" class="box-purple"/>
+  <text x="285" y="75" text-anchor="middle" class="label" style="font-size:11px;fill:var(--purple)">sqlite-vec (vectors)</text>
+
+  <rect x="30" y="120" width="330" height="40" rx="6" class="box-green"/>
+  <text x="195" y="145" text-anchor="middle" class="label">Local API + MCP Server</text>
+
+  <rect x="30" y="190" width="330" height="45" rx="6" class="box-orange"/>
+  <text x="195" y="210" text-anchor="middle" class="label" style="fill:var(--orange)">Sync Engine</text>
+  <text x="195" y="225" text-anchor="middle" class="label-sm">Delta sync + zstd compression + conflict resolution</text>
+
+  <!-- Sync arrows -->
+  <text x="450" y="165" text-anchor="middle" class="label-accent" style="font-size:16px">&harr;</text>
+  <text x="450" y="185" text-anchor="middle" class="label-sm">Internet</text>
+  <text x="450" y="200" text-anchor="middle" class="label-sm">(when available)</text>
+
+  <line x1="360" y1="210" x2="420" y2="210" class="arrow-accent"/>
+  <line x1="480" y1="210" x2="510" y2="210" class="arrow-accent"/>
+
+  <!-- Cloud -->
+  <rect x="510" y="10" width="380" height="280" rx="12" class="box" style="stroke-dasharray:6"/>
+  <text x="530" y="35" class="label-sm" style="fill:var(--accent)">CLOUD</text>
+
+  <rect x="530" y="50" width="150" height="40" rx="6" class="box-accent"/>
+  <text x="605" y="75" text-anchor="middle" class="label-accent" style="font-size:11px">PostgreSQL (master)</text>
+
+  <rect x="710" y="50" width="150" height="40" rx="6" class="box-green"/>
+  <text x="785" y="75" text-anchor="middle" class="label" style="font-size:11px;fill:var(--green)">Qdrant (full index)</text>
+
+  <rect x="530" y="120" width="150" height="40" rx="6" class="box-orange"/>
+  <text x="605" y="145" text-anchor="middle" class="label" style="font-size:11px;fill:var(--orange)">Redis (cache)</text>
+
+  <rect x="710" y="120" width="150" height="40" rx="6" class="box"/>
+  <text x="785" y="145" text-anchor="middle" class="label" style="font-size:11px">S3/R2 (blobs)</text>
+
+  <rect x="530" y="190" width="330" height="45" rx="6" class="box-accent"/>
+  <text x="695" y="210" text-anchor="middle" class="label-accent">Cloud API Server</text>
+  <text x="695" y="225" text-anchor="middle" class="label-sm">Team features, dashboard, webhooks</text>
+
+  <!-- Strategy -->
+  <text x="200" y="260" text-anchor="middle" class="label-sm">Write: LOCAL first (instant)</text>
+  <text x="200" y="275" text-anchor="middle" class="label-sm">Queue changes for sync</text>
+  <text x="695" y="260" text-anchor="middle" class="label-sm">Conflict: Last-write-wins (default)</text>
+  <text x="695" y="275" text-anchor="middle" class="label-sm">Pull team memories periodically</text>
+</svg>
+</div>
+
+<!-- ==================== DIAGRAM 5: USER WORKFLOWS ==================== -->
+<h2>5. User Workflows</h2>
+
+<h3>Developer Daily Workflow</h3>
+<div class="flow-row">
+  <div class="flow-step" style="border-color:var(--accent)"><div class="num">1</div><h4>Morning</h4><p>Open IDE. Memory MCP auto-loads project context.</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step"><div class="num">2</div><h4>Coding in Cursor</h4><p>AI calls <code>context()</code> to get relevant memories.</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step"><div class="num">3</div><h4>Debug in Claude CLI</h4><p>Fix bug. Claude calls <code>remember()</code> to store fix.</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step"><div class="num">4</div><h4>Later in Copilot</h4><p>Same fix memory available. No re-explaining.</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step" style="border-color:var(--green)"><div class="num" style="background:var(--green)">5</div><h4>End of Day</h4><p>Dashboard shows 12 new memories. Review stale ones.</p></div>
+</div>
+
+<h3>New Team Member Onboarding</h3>
+<div class="flow-row">
+  <div class="flow-step"><div class="num">1</div><h4>Invite</h4><p>Admin invites new member to team</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step"><div class="num">2</div><h4>Auto-Sync</h4><p>All team shared memories pulled to local</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step"><div class="num">3</div><h4>MCP Active</h4><p>AI tools instantly know project architecture, conventions, known issues</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step" style="border-color:var(--green)"><div class="num" style="background:var(--green)">4</div><h4>Productive Day 1</h4><p>No "how does auth work?" questions</p></div>
+</div>
+
+<h3>First-Time Setup Flow</h3>
+<div class="flow-row">
+  <div class="flow-step"><div class="num">1</div><h4>Install</h4><p><code>npx @universalmemory/create</code></p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step"><div class="num">2</div><h4>Choose Mode</h4><p>Local / Cloud / Hybrid</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step"><div class="num">3</div><h4>Connect Tools</h4><p>Auto-configure MCP for Claude, Cursor</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step"><div class="num">4</div><h4>Import</h4><p>Import CLAUDE.md, .cursorrules</p></div>
+  <div class="flow-arrow-h">&rarr;</div>
+  <div class="flow-step" style="border-color:var(--green)"><div class="num" style="background:var(--green)">5</div><h4>Done!</h4><p>Dashboard + MCP ready</p></div>
+</div>
+
+<!-- ==================== DIAGRAM 6: CONTEXT INJECTION ==================== -->
+<h2>6. AI Context Injection Flow</h2>
+<p>How AI tools automatically get relevant project memory</p>
+
+<div class="diagram-container">
+<svg viewBox="0 0 900 320" width="100%" height="auto">
+  <!-- Developer -->
+  <rect x="30" y="20" width="170" height="45" rx="8" class="box-accent"/>
+  <text x="115" y="48" text-anchor="middle" class="label-accent">Developer types prompt</text>
+
+  <!-- AI Tool -->
+  <rect x="30" y="100" width="170" height="45" rx="8" class="box-green"/>
+  <text x="115" y="128" text-anchor="middle" class="label">AI Tool (Claude/Cursor)</text>
+  <line x1="115" y1="65" x2="115" y2="100" class="arrow-accent"/>
+
+  <!-- MCP call -->
+  <rect x="280" y="100" width="200" height="45" rx="8" class="box-purple"/>
+  <text x="380" y="128" text-anchor="middle" class="label" style="fill:var(--purple)">MCP: context(prompt)</text>
+  <line x1="200" y1="122" x2="280" y2="122" class="arrow-accent"/>
+  <text x="240" y="115" class="label-sm" style="fill:var(--accent)">auto</text>
+
+  <!-- Memory Server -->
+  <rect x="280" y="180" width="200" height="45" rx="8" class="box-green"/>
+  <text x="380" y="208" text-anchor="middle" class="label">Memory Server</text>
+  <line x1="380" y1="145" x2="380" y2="180" class="arrow"/>
+
+  <!-- Search -->
+  <rect x="560" y="100" width="150" height="40" rx="6" class="box-accent"/>
+  <text x="635" y="125" text-anchor="middle" class="label-accent" style="font-size:11px">Vector Search</text>
+
+  <rect x="560" y="155" width="150" height="40" rx="6" class="box-purple"/>
+  <text x="635" y="180" text-anchor="middle" class="label" style="font-size:11px;fill:var(--purple)">Full-Text Search</text>
+
+  <rect x="560" y="210" width="150" height="40" rx="6" class="box-orange"/>
+  <text x="635" y="235" text-anchor="middle" class="label" style="font-size:11px;fill:var(--orange)">Recency + Rank</text>
+
+  <line x1="480" y1="195" x2="560" y2="120" class="arrow"/>
+  <line x1="480" y1="200" x2="560" y2="175" class="arrow"/>
+  <line x1="480" y1="210" x2="560" y2="230" class="arrow"/>
+
+  <!-- Token budget -->
+  <rect x="560" y="270" width="300" height="35" rx="6" class="box-green"/>
+  <text x="710" y="293" text-anchor="middle" class="label" style="font-size:11px">Fit within token budget (adaptive: 2000 tokens)</text>
+  <line x1="635" y1="250" x2="635" y2="270" class="arrow-green"/>
+
+  <!-- Return context -->
+  <rect x="30" y="260" width="430" height="45" rx="8" class="box-accent"/>
+  <text x="245" y="280" text-anchor="middle" class="label-accent" style="font-size:12px">AI gets: "## Relevant Memory\n### Auth: JWT RS256, 15min expiry\n### Bug: Token refresh fixed in v2.3..."</text>
+  <line x1="560" y1="287" x2="460" y2="287" class="arrow-green"/>
+
+  <text x="245" y="250" class="label-sm" style="fill:var(--green)">Context injected into AI response &mdash; developer never manually searched</text>
+</svg>
+</div>
+
+<!-- ==================== DIAGRAM 7: OFFLINE SYNC ==================== -->
+<h2>7. Offline Sync State Machine</h2>
+
+<div class="diagram-container">
+<svg viewBox="0 0 800 250" width="100%" height="auto">
+  <!-- Online state -->
+  <rect x="50" y="30" width="160" height="50" rx="25" class="box-green"/>
+  <text x="130" y="60" text-anchor="middle" class="label" style="fill:var(--green)">ONLINE</text>
+
+  <!-- Syncing -->
+  <rect x="320" y="30" width="160" height="50" rx="25" class="box-accent"/>
+  <text x="400" y="55" text-anchor="middle" class="label-accent">SYNCING</text>
+
+  <!-- Offline -->
+  <rect x="590" y="30" width="160" height="50" rx="25" class="box-orange"/>
+  <text x="670" y="60" text-anchor="middle" class="label" style="fill:var(--orange)">OFFLINE</text>
+
+  <!-- Pending -->
+  <rect x="320" y="160" width="160" height="50" rx="25" class="box-purple"/>
+  <text x="400" y="182" text-anchor="middle" class="label" style="fill:var(--purple)">SYNC_PENDING</text>
+  <text x="400" y="198" text-anchor="middle" class="label-sm">(N changes queued)</text>
+
+  <!-- Arrows -->
+  <line x1="210" y1="55" x2="320" y2="55" class="arrow-accent"/>
+  <text x="265" y="48" class="label-sm" style="fill:var(--accent)">changes detected</text>
+
+  <line x1="480" y1="55" x2="590" y2="55" class="arrow"/>
+  <text x="535" y="48" class="label-sm">internet lost</text>
+
+  <path d="M 670 80 Q 670 130 400 155" class="arrow" style="fill:none"/>
+  <text x="580" y="125" class="label-sm">writes queued</text>
+
+  <path d="M 320 180 Q 200 180 130 80" class="arrow-green" style="fill:none"/>
+  <text x="180" y="150" class="label-sm" style="fill:var(--green)">internet returns</text>
+
+  <path d="M 400 160 Q 400 120 400 80" class="arrow-accent" style="fill:none"/>
+  <text x="415" y="125" class="label-sm" style="fill:var(--accent)">sync</text>
+
+  <!-- All ops work note -->
+  <text x="670" y="105" text-anchor="middle" class="label-sm" style="fill:var(--orange)">All ops work locally</text>
+  <text x="670" y="120" text-anchor="middle" class="label-sm" style="fill:var(--orange)">Full CRUD + search</text>
+</svg>
+</div>
+
+<!-- ==================== DIAGRAM 8: NOTIFICATION FLOW ==================== -->
+<h2>8. Notification &amp; Event Flow</h2>
+
+<div class="diagram-container">
+<svg viewBox="0 0 900 220" width="100%" height="auto">
+  <!-- Event sources -->
+  <rect x="30" y="20" width="140" height="35" rx="6" class="box-green"/>
+  <text x="100" y="42" text-anchor="middle" class="label" style="font-size:11px">Memory CRUD</text>
+
+  <rect x="30" y="65" width="140" height="35" rx="6" class="box-green"/>
+  <text x="100" y="87" text-anchor="middle" class="label" style="font-size:11px">Sync Events</text>
+
+  <rect x="30" y="110" width="140" height="35" rx="6" class="box-green"/>
+  <text x="100" y="132" text-anchor="middle" class="label" style="font-size:11px">System Events</text>
+
+  <!-- Event bus -->
+  <rect x="250" y="30" width="170" height="100" rx="8" class="box-purple"/>
+  <text x="335" y="70" text-anchor="middle" class="label" style="fill:var(--purple)">Event Bus</text>
+  <text x="335" y="90" text-anchor="middle" class="label-sm">(Redis Pub/Sub)</text>
+
+  <line x1="170" y1="37" x2="250" y2="60" class="arrow"/>
+  <line x1="170" y1="82" x2="250" y2="80" class="arrow"/>
+  <line x1="170" y1="127" x2="250" y2="100" class="arrow"/>
+
+  <!-- Delivery channels -->
+  <rect x="510" y="15" width="160" height="35" rx="6" class="box-accent"/>
+  <text x="590" y="37" text-anchor="middle" class="label-accent" style="font-size:11px">WebSocket (real-time)</text>
+
+  <rect x="510" y="60" width="160" height="35" rx="6" class="box-orange"/>
+  <text x="590" y="82" text-anchor="middle" class="label" style="font-size:11px;fill:var(--orange)">In-App (dashboard)</text>
+
+  <rect x="510" y="105" width="160" height="35" rx="6" class="box"/>
+  <text x="590" y="127" text-anchor="middle" class="label" style="font-size:11px">Email (Resend)</text>
+
+  <rect x="510" y="150" width="160" height="35" rx="6" class="box"/>
+  <text x="590" y="172" text-anchor="middle" class="label" style="font-size:11px">Webhook (external)</text>
+
+  <line x1="420" y1="60" x2="510" y2="32" class="arrow-accent"/>
+  <line x1="420" y1="70" x2="510" y2="77" class="arrow"/>
+  <line x1="420" y1="90" x2="510" y2="122" class="arrow"/>
+  <line x1="420" y1="110" x2="510" y2="167" class="arrow"/>
+
+  <!-- Priority labels -->
+  <rect x="720" y="15" width="150" height="170" rx="8" class="box" style="stroke-dasharray:4"/>
+  <text x="730" y="35" class="label-sm" style="fill:var(--accent)">Event routing:</text>
+  <text x="730" y="55" class="label-sm">memory.crud &rarr; WS only</text>
+  <text x="730" y="75" class="label-sm">sync.conflict &rarr; WS + Email</text>
+  <text x="730" y="95" class="label-sm">quota.warning &rarr; WS + Email</text>
+  <text x="730" y="115" class="label-sm">team.added &rarr; WS</text>
+  <text x="730" y="135" class="label-sm">security.alert &rarr; Email</text>
+  <text x="730" y="155" class="label-sm">custom &rarr; Webhook</text>
+</svg>
+</div>
+
+<h2>9. Scaling Architecture</h2>
+<table>
+  <tr><th>Stage</th><th>Users</th><th>Architecture</th><th>Cost</th></tr>
+  <tr><td style="color:var(--green)">Seed</td><td>0-1K</td><td>Single Fly.io + Neon free + Qdrant free</td><td>$0-35/mo</td></tr>
+  <tr><td style="color:var(--accent)">Growth</td><td>1K-10K</td><td>2x app + read replica + Qdrant starter + Redis</td><td>~$200/mo</td></tr>
+  <tr><td style="color:var(--purple)">Scale</td><td>10K-100K</td><td>Auto-scale + PgBouncer + Qdrant cluster + CDN</td><td>~$1,000/mo</td></tr>
+  <tr><td style="color:var(--orange)">Enterprise</td><td>100K-1M</td><td>Multi-region + sharded Postgres + dedicated infra</td><td>~$5,000/mo</td></tr>
+  <tr><td>Massive</td><td>1M+</td><td>Kubernetes + horizontal everything</td><td>~$20,000+/mo</td></tr>
+</table>
+
+</body>
+</html>

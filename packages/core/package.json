@@ -1,0 +1,25 @@
+{
+  "name": "@ponderdb/core",
+  "version": "0.1.0",
+  "description": "PonderDB core memory engine — types, interfaces, storage and search abstractions",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "tsc --build --watch",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ponderdb/ponderdb.git",
+    "directory": "packages/core"
+  }
+}

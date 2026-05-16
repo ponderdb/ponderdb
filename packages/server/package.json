@@ -1,0 +1,40 @@
+{
+  "name": "@ponderdb/server",
+  "version": "0.1.0",
+  "description": "PonderDB server — Hono REST API + MCP server",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "ponderdb-server": "./dist/bin.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "tsx watch src/bin.ts",
+    "start": "node dist/bin.js",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@ponderdb/core": "0.1.0",
+    "@ponderdb/sqlite-store": "0.1.0",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "hono": "^4.7.6",
+    "@hono/node-server": "^1.14.1",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ponderdb/ponderdb.git",
+    "directory": "packages/server"
+  }
+}
