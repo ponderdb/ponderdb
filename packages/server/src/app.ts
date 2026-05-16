@@ -4,6 +4,7 @@ import { logger } from "hono/logger";
 import type { StorageAdapter, EmbeddingProvider } from "@ponderdb/core";
 import { PonderError } from "@ponderdb/core";
 import { memoriesRouter } from "./routes/memories.js";
+import { authRouter } from "./routes/auth.js";
 import { authMiddleware } from "./middleware/auth.js";
 
 export interface AppDeps {
@@ -27,6 +28,7 @@ export function createApp(deps: AppDeps) {
 
   // API routes
   app.route("/api/memories", memoriesRouter(deps));
+  app.route("/api/auth", authRouter(deps));
 
   // Error handler
   app.onError((err, c) => {

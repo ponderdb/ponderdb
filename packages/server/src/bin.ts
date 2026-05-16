@@ -22,28 +22,58 @@ async function main() {
 
   if (mode === "mcp") {
     // MCP stdio mode — used by Claude, Cursor, Copilot, etc.
+    // No auth needed — stdio is process-local, only the parent can talk to it.
     const mcpServer = createMcpServer(store, embedder);
     const transport = new StdioServerTransport();
     await mcpServer.connect(transport);
     console.error("PonderDB MCP server running on stdio");
   } else {
-    // HTTP mode — REST API
-    const app = createApp({
-      store,
-      embedder,
-      apiKeyRequired: process.env.PONDER_API_KEY_REQUIRED !== "false",
-    });
+    // HTTP mode — REST API with auth
+    const apiKeyRequired = process.env.PONDER_API_KEY_REQUIRED !== "false";
 
-    serve({ fetch: app.fetch, port, hostname: host }, () => {
+    // Auto-generate API key on first start
+    if (apiKeyRequired) {
+      const keyCount = await store.countApiKeys();
+      if (keyCount === 0) {
+        const { rawKey } = await store.createApiKey("default");
+        console.log("\n  ┌─────────────────────────────────────────────────────┐");
+        console.log("  │                                                     │");
+        console.log("  │  Your API key (save this — shown only once):        │");
+        console.log(`  │  ${rawKey}  │`);
+        console.log("  │                                                     │");
+        console.log("  │  Use: Authorization: Bearer <key>                   │");
+        console.log("  │  Or:  PONDER_API_KEY=<key> in .env                  │");
+        console.log("  │                                                     │");
+        console.log("  └─────────────────────────────────────────────────────┘\n");
+      }
+    }
+
+    const app = createApp({ store, embedder, apiKeyRequired });
+
+    const server = serve({ fetch: app.fetch, port, hostname: host }, () => {
       console.log(`PonderDB server running at http://${host}:${port}`);
       console.log(`Data directory: ${dataDir}`);
+      console.log(`Auth: ${apiKeyRequired ? "enabled" : "disabled"}`);
     });
+
+    // Graceful shutdown — close HTTP server then DB
+    const shutdown = () => {
+      console.log("\nShutting down...");
+      server.close(async () => {
+        await store.close();
+        process.exit(0);
+      });
+      // Force exit after 3s if server won't close
+      setTimeout(() => process.exit(0), 3000);
+    };
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+    return;
   }
 
-  // Graceful shutdown
-  for (const signal of ["SIGINT", "SIGTERM"]) {
+  // Graceful shutdown for MCP mode
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, async () => {
-      console.log(`\nReceived ${signal}, shutting down...`);
       await store.close();
       process.exit(0);
     });

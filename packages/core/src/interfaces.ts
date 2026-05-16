@@ -7,6 +7,7 @@ import type {
   SearchResult,
   ListMemoriesFilter,
   PaginatedResult,
+  ApiKey,
 } from "./types.js";
 
 /** Storage backend interface — implemented by sqlite-store, pg-store, etc. */
@@ -46,6 +47,21 @@ export interface StorageAdapter {
 
   /** Record an access (bump accessedAt + accessCount) */
   recordAccess(id: MemoryId): Promise<void>;
+
+  /** Create an API key (store hash, return full key only once) */
+  createApiKey(name: string): Promise<{ apiKey: ApiKey; rawKey: string }>;
+
+  /** Validate an API key by its raw value, returns key record if valid */
+  validateApiKey(rawKey: string): Promise<ApiKey | null>;
+
+  /** List all API keys (without hashes) */
+  listApiKeys(): Promise<ApiKey[]>;
+
+  /** Delete an API key */
+  deleteApiKey(id: string): Promise<boolean>;
+
+  /** Count API keys */
+  countApiKeys(): Promise<number>;
 }
 
 /** Embedding provider interface */

@@ -2,7 +2,7 @@ import type { MiddlewareHandler } from "hono";
 import type { StorageAdapter } from "@ponderdb/core";
 import { AuthenticationError } from "@ponderdb/core";
 
-export function authMiddleware(_store: StorageAdapter): MiddlewareHandler {
+export function authMiddleware(store: StorageAdapter): MiddlewareHandler {
   return async (c, next) => {
     const authHeader = c.req.header("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -14,8 +14,11 @@ export function authMiddleware(_store: StorageAdapter): MiddlewareHandler {
       throw new AuthenticationError("Invalid API key format");
     }
 
-    // TODO: validate against stored API keys
-    // For MVP local mode, accept any well-formed key
+    const apiKey = await store.validateApiKey(token);
+    if (!apiKey) {
+      throw new AuthenticationError("Invalid or expired API key");
+    }
+
     await next();
   };
 }

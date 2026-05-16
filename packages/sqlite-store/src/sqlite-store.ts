@@ -10,9 +10,12 @@ import type {
   ListMemoriesFilter,
   PaginatedResult,
   SearchResult,
+  ApiKey,
 } from "@ponderdb/core";
 import {
   generateId,
+  generateApiKey,
+  hashApiKey,
   MemoryNotFoundError,
   DuplicateKeyError,
   cosineSimilarity,
@@ -73,6 +76,16 @@ export class SqliteStore implements StorageAdapter {
       CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category);
       CREATE INDEX IF NOT EXISTS idx_memories_project_id ON memories(project_id);
       CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at);
+
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        key_hash TEXT NOT NULL UNIQUE,
+        prefix TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        last_used_at TEXT,
+        expires_at TEXT
+      );
     `);
   }
 
@@ -299,6 +312,76 @@ export class SqliteStore implements StorageAdapter {
     this.db
       .prepare("UPDATE memories SET accessed_at = datetime('now'), access_count = access_count + 1 WHERE id = ?")
       .run(id);
+  }
+
+  async createApiKey(name: string): Promise<{ apiKey: ApiKey; rawKey: string }> {
+    const { key: rawKey, prefix, hash } = generateApiKey();
+    const id = generateId();
+    const now = new Date().toISOString();
+
+    this.db.prepare(`
+      INSERT INTO api_keys (id, name, key_hash, prefix, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(id, name, hash, prefix, now);
+
+    return {
+      apiKey: { id, name, keyHash: hash, prefix, userId: "local", createdAt: new Date(now) },
+      rawKey,
+    };
+  }
+
+  async validateApiKey(rawKey: string): Promise<ApiKey | null> {
+    const hash = hashApiKey(rawKey);
+    const row = this.db.prepare("SELECT * FROM api_keys WHERE key_hash = ?").get(hash) as {
+      id: string; name: string; key_hash: string; prefix: string;
+      created_at: string; last_used_at: string | null; expires_at: string | null;
+    } | undefined;
+
+    if (!row) return null;
+
+    // Check expiry
+    if (row.expires_at && new Date(row.expires_at) < new Date()) return null;
+
+    // Update last_used_at
+    this.db.prepare("UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?").run(row.id);
+
+    return {
+      id: row.id,
+      name: row.name,
+      keyHash: row.key_hash,
+      prefix: row.prefix,
+      userId: "local",
+      createdAt: new Date(row.created_at),
+      lastUsedAt: row.last_used_at ? new Date(row.last_used_at) : undefined,
+      expiresAt: row.expires_at ? new Date(row.expires_at) : undefined,
+    };
+  }
+
+  async listApiKeys(): Promise<ApiKey[]> {
+    const rows = this.db.prepare("SELECT * FROM api_keys ORDER BY created_at DESC").all() as {
+      id: string; name: string; key_hash: string; prefix: string;
+      created_at: string; last_used_at: string | null; expires_at: string | null;
+    }[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      keyHash: "[hidden]",
+      prefix: row.prefix,
+      userId: "local",
+      createdAt: new Date(row.created_at),
+      lastUsedAt: row.last_used_at ? new Date(row.last_used_at) : undefined,
+      expiresAt: row.expires_at ? new Date(row.expires_at) : undefined,
+    }));
+  }
+
+  async deleteApiKey(id: string): Promise<boolean> {
+    const result = this.db.prepare("DELETE FROM api_keys WHERE id = ?").run(id);
+    return result.changes > 0;
+  }
+
+  async countApiKeys(): Promise<number> {
+    return (this.db.prepare("SELECT COUNT(*) as count FROM api_keys").get() as { count: number }).count;
   }
 
   private rowToMemory(row: SqliteRow): Memory {
