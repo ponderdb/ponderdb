@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import type { StorageAdapter, EmbeddingProvider } from "@ponderdb/core";
+import type { StorageAdapter, EmbeddingProvider, MemoryCategory } from "@ponderdb/core";
 import { detectCategory } from "@ponderdb/core";
 
 export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvider) {
@@ -29,9 +29,9 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
       const existing = await store.getByKey(key, projectId);
       let memory;
       if (existing) {
-        memory = await store.update(existing.id, { content, category: cat as any, importance, tags, embedding });
+        memory = await store.update(existing.id, { content, category: cat as MemoryCategory, importance, tags, embedding });
       } else {
-        memory = await store.create({ key, content, category: cat as any, importance, tags, projectId, embedding });
+        memory = await store.create({ key, content, category: cat as MemoryCategory, importance, tags, projectId, embedding });
       }
 
       return {
@@ -135,7 +135,7 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
     },
     async ({ category, limit, projectId }) => {
       const result = await store.list({
-        category: category as any,
+        category: category as MemoryCategory | undefined,
         projectId,
         limit,
         sortBy: "updatedAt",

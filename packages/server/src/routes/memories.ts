@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { AppDeps } from "../app.js";
+import type { MemoryCategory, MemoryImportance, ListMemoriesFilter } from "@ponderdb/core";
 import { ValidationError, detectCategory } from "@ponderdb/core";
 
 export function memoriesRouter(deps: AppDeps) {
@@ -8,14 +9,14 @@ export function memoriesRouter(deps: AppDeps) {
 
   // List memories
   router.get("/", async (c) => {
-    const filter = {
-      category: c.req.query("category") as any,
+    const filter: ListMemoriesFilter = {
+      category: c.req.query("category") as MemoryCategory | undefined,
       projectId: c.req.query("projectId"),
-      importance: c.req.query("importance") as any,
+      importance: c.req.query("importance") as MemoryImportance | undefined,
       limit: c.req.query("limit") ? Number(c.req.query("limit")) : undefined,
       offset: c.req.query("offset") ? Number(c.req.query("offset")) : undefined,
-      sortBy: c.req.query("sortBy") as any,
-      sortOrder: c.req.query("sortOrder") as any,
+      sortBy: c.req.query("sortBy") as ListMemoriesFilter["sortBy"],
+      sortOrder: c.req.query("sortOrder") as ListMemoriesFilter["sortOrder"],
     };
     const result = await store.list(filter);
     return c.json(result);

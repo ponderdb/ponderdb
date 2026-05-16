@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHash } from "node:crypto";
 
 /** Generate a unique memory ID */
 export function generateId(): string {
@@ -16,7 +16,6 @@ export function generateApiKey(): { key: string; prefix: string; hash: string } 
 
 /** Hash an API key for storage */
 export function hashApiKey(key: string): string {
-  const { createHash } = require("node:crypto") as typeof import("node:crypto");
   return createHash("sha256").update(key).digest("hex");
 }
 

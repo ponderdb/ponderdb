@@ -2,6 +2,7 @@
   "name": "ponderdb",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
   "description": "Universal AI Agent Memory Server",
   "workspaces": [
     "packages/*"
@@ -10,8 +11,12 @@
     "build": "npm run build --workspaces",
     "dev": "npm run dev --workspace=@ponderdb/server",
     "test": "npm run test --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
-    "clean": "rm -rf packages/*/dist packages/*/*.tsbuildinfo"
+    "lint": "eslint packages/*/src/**/*.ts",
+    "lint:fix": "eslint --fix packages/*/src/**/*.ts",
+    "format": "prettier --write \"packages/*/src/**/*.ts\"",
+    "format:check": "prettier --check \"packages/*/src/**/*.ts\"",
+    "clean": "rm -rf packages/*/dist packages/*/*.tsbuildinfo",
+    "setup": "npm install && npm run build"
   },
   "engines": {
     "node": ">=22.0.0"
@@ -22,6 +27,11 @@
     "url": "https://github.com/ponderdb/ponderdb.git"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.59.3"
   }
 }
