@@ -1,6 +1,24 @@
-# PonderDB
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="./assets/logo.svg">
+    <img alt="PonderDB" src="./assets/logo.svg" width="360">
+  </picture>
+</p>
 
-**Universal AI Agent Memory Server** — One install, every AI tool gets persistent memory.
+<p align="center">
+  <strong>Universal AI Agent Memory Server</strong> — One install, every AI tool gets persistent memory.
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> &bull;
+  <a href="#connect-your-ai-tools">Integrations</a> &bull;
+  <a href="#architecture">Architecture</a> &bull;
+  <a href="#configuration">Config</a> &bull;
+  <a href="#roadmap">Roadmap</a>
+</p>
+
+---
 
 PonderDB is a centralized memory server that gives all your AI coding tools (Claude, Cursor, Copilot, ChatGPT, Gemini, and more) shared long-term project memory. Memories are stored locally, searched semantically, and accessible via MCP protocol, REST API, CLI, or SDK.
 
