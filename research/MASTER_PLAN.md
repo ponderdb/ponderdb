@@ -17,6 +17,8 @@ One install → every AI agent gets same long-term project memory.
 | 5 | **Pricing, Capacity & Performance** | Done | [05-pricing-capacity-performance.md](./05-pricing-capacity-performance.md) |
 | 6 | **Advanced Features & Extras** | Done | [06-extras-and-advanced.md](./06-extras-and-advanced.md) |
 | 7 | **User Configuration & Fallbacks** | Done | [07-configuration-and-fallbacks.md](./07-configuration-and-fallbacks.md) |
+| 8 | **HTTP MCP Transport** | Done | [08-http-mcp-transport.md](./08-http-mcp-transport.md) |
+| 9 | **Web Dashboard** | Done | [09-web-dashboard.md](./09-web-dashboard.md) |
 
 ---
 
