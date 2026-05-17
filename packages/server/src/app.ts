@@ -26,12 +26,13 @@ export function createApp(deps: AppDeps) {
 
   if (deps.apiKeyRequired) {
     app.use("/api/*", authMiddleware(deps.store));
+    app.use("/mcp/*", authMiddleware(deps.store));
   }
 
   // Health check
   app.get("/health", (c) => c.json({ status: "ok", version: "0.1.0" }));
 
-  // MCP over HTTP (no API key auth — MCP has its own session management)
+  // MCP over HTTP (auth via API key, sessions managed by MCP protocol)
   app.route("/mcp", mcpHttpRouter(deps));
 
   // API routes
