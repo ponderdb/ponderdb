@@ -6,6 +6,7 @@ import { PonderError } from "@ponderdb/core";
 import { memoriesRouter } from "./routes/memories.js";
 import { authRouter } from "./routes/auth.js";
 import { authMiddleware } from "./middleware/auth.js";
+import { mcpHttpRouter } from "./mcp-http.js";
 
 export interface AppDeps {
   store: StorageAdapter;
@@ -25,6 +26,9 @@ export function createApp(deps: AppDeps) {
 
   // Health check
   app.get("/health", (c) => c.json({ status: "ok", version: "0.1.0" }));
+
+  // MCP over HTTP (no API key auth — MCP has its own session management)
+  app.route("/mcp", mcpHttpRouter(deps));
 
   // API routes
   app.route("/api/memories", memoriesRouter(deps));
