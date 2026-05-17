@@ -52,7 +52,8 @@ ChatGPT ─┘
 - **Semantic search** — Find memories by meaning, not just keywords
 - **Auto-categorized** — Memories tagged as `architecture`, `bug`, `pattern`, `config`, `decision`, `snippet`, etc.
 - **Secure by default** — API key auth for REST API, auto-generated on first start
-- **MCP native** — Works with any MCP-compatible tool out of the box
+- **MCP native** — Works with any MCP-compatible tool out of the box (stdio + HTTP)
+- **Web dashboard** — Browse memories, search, manage API keys at `localhost:7437`
 
 ---
 
@@ -65,7 +66,7 @@ git clone https://github.com/ponderdb/ponderdb.git
 cd ponderdb
 npm run setup    # installs deps + builds all packages
 
-npm run dev      # starts server at http://127.0.0.1:7437
+npm run dev      # starts server + dashboard at http://127.0.0.1:7437
 ```
 
 ### From npm (coming soon)
@@ -164,6 +165,18 @@ Add to `.vscode/mcp.json` in your project:
 
 Same pattern — add MCP server config pointing to the PonderDB binary with `mcp` argument. All MCP-compatible tools work identically.
 
+### MCP over HTTP (Streamable HTTP)
+
+For tools that support HTTP-based MCP (instead of stdio), PonderDB exposes an MCP endpoint at `/mcp` when running in HTTP mode:
+
+```
+MCP Endpoint: http://127.0.0.1:7437/mcp
+Transport:    Streamable HTTP (POST /mcp)
+Sessions:     Stateful (session ID in mcp-session-id header)
+```
+
+This is useful for remote access, ChatGPT integrations, or when stdio is not available. The HTTP MCP endpoint is always available when the server is running — no extra config needed.
+
 ### After npm publish (future)
 
 ```json
@@ -228,12 +241,29 @@ PONDER_API_KEY_REQUIRED=false npm run dev
 
 ---
 
+## Web Dashboard
+
+PonderDB includes a built-in web dashboard at `http://127.0.0.1:7437` when running in HTTP mode.
+
+**Features:**
+- **Memory Browser** — List, filter by category, paginate through all memories
+- **Memory Detail** — View full content, metadata, access stats, version history
+- **Semantic Search** — Search memories by meaning with relevance scores
+- **API Key Management** — Create, view, and revoke API keys
+
+The dashboard is served as static files from the same Hono server — no extra setup needed. Just start the server and open `http://127.0.0.1:7437` in your browser.
+
+For development, run `npm run dev --workspace=@ponderdb/dashboard` for hot-reload (proxies API to port 7437).
+
+---
+
 ## REST API
 
 All endpoints require `Authorization: Bearer pndr_xxx` header (unless auth is disabled).
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| `ALL` | `/mcp` | MCP over HTTP endpoint (no auth, session-based) |
 | `GET` | `/health` | Health check (no auth) |
 | `GET` | `/api/memories` | List memories (paginated, filterable) |
 | `POST` | `/api/memories` | Create a memory |
@@ -356,7 +386,8 @@ ponderdb/
 ├── packages/
 │   ├── core/           — Types, interfaces, storage abstractions, utilities
 │   ├── sqlite-store/   — SQLite + better-sqlite3 storage adapter
-│   ├── server/         — Hono REST API + MCP server
+│   ├── server/         — Hono REST API + MCP server (stdio + HTTP)
+│   ├── dashboard/      — React + Vite web dashboard
 │   ├── sdk/            — TypeScript client SDK
 │   └── cli/            — Terminal interface (ponder command)
 ├── research/           — Design documents and architecture research
@@ -374,8 +405,8 @@ ponderdb/
 ┌──────────────────▼──────────────────────────────┐
 │              PonderDB Server                      │
 │  ┌──────────┐  ┌───────────┐  ┌──────────────┐  │
-│  │ MCP      │  │ REST API  │  │ Auth         │  │
-│  │ Server   │  │ (Hono)    │  │ Middleware   │  │
+│  │ MCP      │  │ REST API  │  │ Dashboard    │  │
+│  │stdio+HTTP│  │ (Hono)    │  │ (React)      │  │
 │  └────┬─────┘  └─────┬─────┘  └──────────────┘  │
 │       │               │                          │
 │  ┌────▼───────────────▼─────┐                    │
@@ -460,6 +491,8 @@ npm run clean        # Remove build artifacts
 - [x] SQLite storage adapter (local-first)
 - [x] Hono REST API server
 - [x] MCP server (stdio transport)
+- [x] MCP over HTTP (Streamable HTTP transport)
+- [x] Web dashboard (memory browser, search, API key management)
 - [x] API key authentication
 - [x] TypeScript SDK
 - [x] CLI tool
@@ -472,11 +505,9 @@ npm run clean        # Remove build artifacts
 - [ ] PostgreSQL + pgvector storage adapter
 - [ ] User accounts + web auth
 - [ ] Team/shared memories
-- [ ] MCP over HTTP/SSE (for ChatGPT, remote access)
 - [ ] Hosted service at ponderdb.dev
 
 ### Phase 3 — Polish
-- [ ] Web dashboard (memory browser, search, analytics)
 - [ ] VS Code extension
 - [ ] Browser extension
 - [ ] Python SDK
