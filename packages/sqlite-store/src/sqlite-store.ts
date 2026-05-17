@@ -208,8 +208,17 @@ export class SqliteStore implements StorageAdapter {
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const sortBy = filter.sortBy ?? "updated_at";
-    const sortOrder = filter.sortOrder ?? "desc";
+    const columnMap: Record<string, string> = {
+      updatedAt: "updated_at",
+      createdAt: "created_at",
+      accessedAt: "accessed_at",
+      accessCount: "access_count",
+    };
+    const rawSort = filter.sortBy ?? "updated_at";
+    const sortBy = columnMap[rawSort] ?? rawSort;
+    const validColumns = new Set(["id", "key", "content", "category", "importance", "created_at", "updated_at", "accessed_at", "access_count", "version"]);
+    if (!validColumns.has(sortBy)) throw new Error(`Invalid sort column: ${sortBy}`);
+    const sortOrder = filter.sortOrder === "asc" ? "asc" : "desc";
     const limit = filter.limit ?? 50;
     const offset = filter.offset ?? 0;
 
