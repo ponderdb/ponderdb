@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import * as sqliteVec from "sqlite-vec";
 import { resolve } from "node:path";
 import { mkdirSync } from "node:fs";
 import type {
@@ -18,7 +19,6 @@ import {
   hashApiKey,
   MemoryNotFoundError,
   DuplicateKeyError,
-  cosineSimilarity,
 } from "@ponderdb/core";
 
 interface SqliteRow {
@@ -38,20 +38,29 @@ interface SqliteRow {
   version: number;
 }
 
+function embeddingToBlob(embedding: number[]): Buffer {
+  return Buffer.from(new Float32Array(embedding).buffer);
+}
+
 export class SqliteStore implements StorageAdapter {
   private db!: Database.Database;
   private dbPath: string;
+  private vecDimensions: number;
 
-  constructor(dataDir: string) {
+  constructor(dataDir: string, dimensions = 384) {
     const dir = resolve(dataDir);
     mkdirSync(dir, { recursive: true });
     this.dbPath = resolve(dir, "ponder.db");
+    this.vecDimensions = dimensions;
   }
 
   async init(): Promise<void> {
     this.db = new Database(this.dbPath);
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
+
+    // Load sqlite-vec extension
+    sqliteVec.load(this.db);
 
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS memories (
@@ -87,6 +96,14 @@ export class SqliteStore implements StorageAdapter {
         expires_at TEXT
       );
     `);
+
+    // Create sqlite-vec virtual table for vector search
+    this.db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING vec0(
+        memory_id TEXT PRIMARY KEY,
+        embedding float[${this.vecDimensions}] distance_metric=cosine
+      );
+    `);
   }
 
   async close(): Promise<void> {
@@ -102,25 +119,31 @@ export class SqliteStore implements StorageAdapter {
 
     const id = generateId();
     const now = new Date().toISOString();
-    const embeddingBlob = input.embedding
-      ? Buffer.from(new Float32Array(input.embedding).buffer)
-      : null;
+    const embeddingBlob = input.embedding ? embeddingToBlob(input.embedding) : null;
 
-    this.db.prepare(`
+    const insertMemory = this.db.prepare(`
       INSERT INTO memories (id, key, content, category, importance, tags, metadata, embedding, project_id, created_at, updated_at, accessed_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      input.key,
-      input.content,
-      input.category ?? "custom",
-      input.importance ?? "medium",
-      JSON.stringify(input.tags ?? []),
-      JSON.stringify(input.metadata ?? {}),
-      embeddingBlob,
-      input.projectId ?? null,
-      now, now, now,
-    );
+    `);
+
+    const insertVec = this.db.prepare(`
+      INSERT INTO vec_memories (memory_id, embedding) VALUES (?, ?)
+    `);
+
+    const tx = this.db.transaction(() => {
+      insertMemory.run(
+        id, input.key, input.content,
+        input.category ?? "custom", input.importance ?? "medium",
+        JSON.stringify(input.tags ?? []), JSON.stringify(input.metadata ?? {}),
+        embeddingBlob, input.projectId ?? null,
+        now, now, now,
+      );
+      if (embeddingBlob) {
+        insertVec.run(id, embeddingBlob);
+      }
+    });
+
+    tx();
 
     return this.rowToMemory(
       this.db.prepare("SELECT * FROM memories WHERE id = ?").get(id) as SqliteRow,
@@ -166,13 +189,27 @@ export class SqliteStore implements StorageAdapter {
       sets.push("metadata = ?");
       params.push(JSON.stringify(input.metadata));
     }
+
+    let newEmbeddingBlob: Buffer | undefined;
     if (input.embedding !== undefined) {
+      newEmbeddingBlob = embeddingToBlob(input.embedding);
       sets.push("embedding = ?");
-      params.push(Buffer.from(new Float32Array(input.embedding).buffer));
+      params.push(newEmbeddingBlob);
     }
 
     params.push(id);
-    this.db.prepare(`UPDATE memories SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+
+    const tx = this.db.transaction(() => {
+      this.db.prepare(`UPDATE memories SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+
+      if (newEmbeddingBlob) {
+        // Delete old vec entry and insert new one (vec0 doesn't support UPDATE)
+        this.db.prepare("DELETE FROM vec_memories WHERE memory_id = ?").run(id);
+        this.db.prepare("INSERT INTO vec_memories (memory_id, embedding) VALUES (?, ?)").run(id, newEmbeddingBlob);
+      }
+    });
+
+    tx();
 
     return this.rowToMemory(
       this.db.prepare("SELECT * FROM memories WHERE id = ?").get(id) as SqliteRow,
@@ -180,7 +217,12 @@ export class SqliteStore implements StorageAdapter {
   }
 
   async delete(id: MemoryId): Promise<boolean> {
-    const result = this.db.prepare("DELETE FROM memories WHERE id = ?").run(id);
+    const tx = this.db.transaction(() => {
+      this.db.prepare("DELETE FROM vec_memories WHERE memory_id = ?").run(id);
+      return this.db.prepare("DELETE FROM memories WHERE id = ?").run(id);
+    });
+
+    const result = tx();
     return result.changes > 0;
   }
 
@@ -244,38 +286,39 @@ export class SqliteStore implements StorageAdapter {
     limit: number,
     filter?: { category?: string; projectId?: string },
   ): Promise<SearchResult[]> {
-    // Brute-force cosine similarity for now — sqlite-vec upgrade later
-    const conditions: string[] = ["embedding IS NOT NULL"];
-    const params: unknown[] = [];
+    const queryBlob = embeddingToBlob(embedding);
 
-    if (filter?.category) {
-      conditions.push("category = ?");
-      params.push(filter.category);
+    // KNN search via sqlite-vec
+    const vecRows = this.db.prepare(`
+      SELECT memory_id, distance
+      FROM vec_memories
+      WHERE embedding MATCH ?
+      ORDER BY distance
+      LIMIT ?
+    `).all(queryBlob, limit * 3) as { memory_id: string; distance: number }[];
+
+    // Fetch full memory rows and apply filters
+    const results: SearchResult[] = [];
+    for (const vr of vecRows) {
+      if (results.length >= limit) break;
+
+      const row = this.db.prepare("SELECT * FROM memories WHERE id = ?").get(vr.memory_id) as SqliteRow | undefined;
+      if (!row) continue;
+
+      if (filter?.category && row.category !== filter.category) continue;
+      if (filter?.projectId && row.project_id !== filter.projectId) continue;
+
+      // Convert cosine distance to similarity score (distance 0 = perfect match = score 1)
+      const score = 1 - vr.distance;
+
+      results.push({
+        memory: this.rowToMemory(row),
+        score,
+        matchType: "semantic",
+      });
     }
-    if (filter?.projectId) {
-      conditions.push("project_id = ?");
-      params.push(filter.projectId);
-    }
 
-    const where = conditions.join(" AND ");
-    const rows = this.db
-      .prepare(`SELECT * FROM memories WHERE ${where}`)
-      .all(...params) as SqliteRow[];
-
-    const scored = rows
-      .map((row) => {
-        const stored = new Float32Array(
-          (row.embedding as Buffer).buffer,
-          (row.embedding as Buffer).byteOffset,
-          (row.embedding as Buffer).byteLength / 4,
-        );
-        const score = cosineSimilarity(embedding, Array.from(stored));
-        return { memory: this.rowToMemory(row), score, matchType: "semantic" as const };
-      })
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
-
-    return scored;
+    return results;
   }
 
   async keywordSearch(
