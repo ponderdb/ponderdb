@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTTP MCP Transport — PonderDB</title>
+<style>
+  :root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;--purple:#d2a8ff;--orange:#f0883e;--red:#f85149;--code-bg:#1c2128; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;padding:2rem;max-width:1200px;margin:0 auto}
+  h1{font-size:2rem;color:var(--accent);margin-bottom:0.5rem}
+  h2{font-size:1.4rem;color:var(--purple);margin-top:2.5rem;margin-bottom:1rem;border-bottom:1px solid var(--border);padding-bottom:0.5rem}
+  h3{font-size:1.1rem;color:var(--green);margin-top:1.5rem;margin-bottom:0.75rem}
+  p{margin-bottom:1rem}
+  table{width:100%;border-collapse:collapse;margin:1rem 0 1.5rem;font-size:0.88rem}
+  th{background:var(--surface);color:var(--accent);text-align:left;padding:0.6rem;border:1px solid var(--border);font-weight:600}
+  td{padding:0.5rem 0.6rem;border:1px solid var(--border)}
+  tr:nth-child(even){background:rgba(22,27,34,0.5)}
+  code{background:var(--code-bg);padding:0.1rem 0.35rem;border-radius:4px;font-size:0.83em;color:var(--orange)}
+  pre{background:var(--code-bg);padding:1rem;border-radius:8px;overflow-x:auto;margin:1rem 0;border:1px solid var(--border);font-size:0.82rem;line-height:1.5}
+  pre code{background:none;padding:0;color:var(--text)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin:1rem 0}
+  .highlight{background:rgba(88,166,255,0.08);border-left:3px solid var(--accent);padding:1rem 1.5rem;margin:1rem 0;border-radius:0 8px 8px 0}
+  .badge{display:inline-block;padding:0.15rem 0.5rem;border-radius:10px;font-size:0.72rem;font-weight:600}
+  .badge-green{background:rgba(63,185,80,0.15);color:var(--green)}
+  .badge-blue{background:rgba(88,166,255,0.15);color:var(--accent)}
+  .badge-orange{background:rgba(240,136,62,0.15);color:var(--orange)}
+  .nav{display:flex;gap:0.5rem;flex-wrap:wrap;margin:1rem 0 2rem}
+  .nav a{background:var(--surface);border:1px solid var(--border);padding:0.4rem 0.8rem;border-radius:8px;font-size:0.82rem;color:var(--accent);text-decoration:none}
+  .nav a:hover{background:rgba(88,166,255,0.1);border-color:var(--accent)}
+  .diagram{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:1.5rem;margin:1.5rem 0;font-family:'SF Mono',Monaco,Consolas,monospace;white-space:pre;overflow-x:auto;font-size:0.8rem;line-height:1.35}
+  @media(max-width:768px){body{padding:1rem}}
+</style>
+</head>
+<body>
+
+<h1>HTTP MCP Transport</h1>
+<p style="color:var(--muted)">Streamable HTTP transport for remote MCP access</p>
+
+<div class="nav">
+  <a href="index.html">&larr; Index</a>
+  <a href="master-plan.html">Master Plan</a>
+  <a href="system-design.html">System Design</a>
+  <a href="web-dashboard.html">Dashboard</a>
+  <a href="ai-integrations.html">AI Integrations</a>
+</div>
+
+<h2>Transport Modes</h2>
+
+<table>
+  <thead><tr><th>Transport</th><th>Protocol</th><th>Use Case</th><th>Auth</th></tr></thead>
+  <tbody>
+    <tr><td><strong>stdio</strong></td><td>stdin/stdout</td><td>Local AI tools (Claude Code, Cursor, Copilot)</td><td>None (process-local)</td></tr>
+    <tr><td><strong>Streamable HTTP</strong></td><td>HTTP POST + SSE</td><td>Remote access, ChatGPT, cloud deployments</td><td>Session-based</td></tr>
+  </tbody>
+</table>
+
+<h2>Why HTTP MCP?</h2>
+
+<div class="card">
+  <p>stdio works great for local tools &mdash; the AI tool spawns PonderDB as a child process. But some scenarios need HTTP:</p>
+  <ul style="margin-left:1.5rem;color:var(--muted)">
+    <li><strong>Remote access</strong> &mdash; MCP server on cloud VM, clients connect over network</li>
+    <li><strong>ChatGPT / web-based tools</strong> &mdash; Can&rsquo;t spawn child processes</li>
+    <li><strong>Shared server</strong> &mdash; Multiple users/tools connecting to one instance</li>
+    <li><strong>Containerized deployments</strong> &mdash; Docker, Kubernetes</li>
+    <li><strong>Cross-machine memory</strong> &mdash; Access from laptop, desktop, CI/CD</li>
+  </ul>
+</div>
+
+<h2>Architecture</h2>
+
+<div class="diagram">Client (AI Tool)                    PonderDB Server (Hono)
+     &boxv;                                     &boxv;
+     &boxv;  POST /mcp                          &boxv;
+     &boxv;  { "method": "initialize" }  &rarr;&rarr;&rarr;&rarr;&boxv;
+     &boxv;                                     &boxv;  Create transport + MCP server
+     &boxv;  &larr;&larr;&larr; SSE: initialize result      &boxv;  Store session in map
+     &boxv;          + mcp-session-id header     &boxv;
+     &boxv;                                     &boxv;
+     &boxv;  POST /mcp                          &boxv;
+     &boxv;  mcp-session-id: &lt;uuid&gt;             &boxv;
+     &boxv;  { "method": "tools/call",          &boxv;
+     &boxv;    "name": "remember" }      &rarr;&rarr;&rarr;&rarr;&boxv;  Route to stored transport
+     &boxv;                                     &boxv;
+     &boxv;  &larr;&larr;&larr; SSE: tool result              &boxv;
+     &boxv;                                     &boxv;
+     &boxv;  DELETE /mcp                        &boxv;
+     &boxv;  mcp-session-id: &lt;uuid&gt;      &rarr;&rarr;&rarr;&rarr;&boxv;  Clean up session</div>
+
+<h2>Session Management</h2>
+
+<pre><code>// Map of session ID -> transport
+const sessions = new Map&lt;string, WebStandardStreamableHTTPServerTransport&gt;();
+
+// New session: transport created with UUID generator
+const transport = new WebStandardStreamableHTTPServerTransport({
+  sessionIdGenerator: () =&gt; randomUUID(),
+  onsessioninitialized: (id) =&gt; sessions.set(id, transport),
+  onsessionclosed: (id) =&gt; sessions.delete(id),
+});
+
+// Each session gets its own MCP server
+const mcpServer = createMcpServer(store, embedder);
+await mcpServer.connect(transport);</code></pre>
+
+<h2>Hono Integration</h2>
+
+<div class="highlight">
+  <p>The SDK&rsquo;s <code>WebStandardStreamableHTTPServerTransport</code> uses Web Standard <code>Request</code>/<code>Response</code> &mdash; perfect fit for Hono. <code>c.req.raw</code> passes directly, zero adapter overhead.</p>
+</div>
+
+<pre><code>router.all("/", async (c) =&gt; {
+  return transport.handleRequest(c.req.raw);
+});</code></pre>
+
+<h2>Endpoint</h2>
+
+<div class="card">
+  <table>
+    <tr><td><strong>URL</strong></td><td><code>http://127.0.0.1:7437/mcp</code></td></tr>
+    <tr><td><strong>Methods</strong></td><td>POST (messages), GET (SSE stream), DELETE (close session)</td></tr>
+    <tr><td><strong>Headers</strong></td><td><code>mcp-session-id</code> (required after init), <code>Content-Type: application/json</code></td></tr>
+  </table>
+</div>
+
+<h2>stdio vs HTTP Comparison</h2>
+
+<table>
+  <thead><tr><th>Aspect</th><th>stdio</th><th>HTTP</th></tr></thead>
+  <tbody>
+    <tr><td>Setup</td><td>Config file, tool spawns process</td><td>URL in config</td></tr>
+    <tr><td>Latency</td><td>~1ms (IPC)</td><td>~5&ndash;20ms (HTTP)</td></tr>
+    <tr><td>Security</td><td>Inherent (process isolation)</td><td>Needs TLS + auth</td></tr>
+    <tr><td>Scalability</td><td>1 tool per process</td><td>Multiple clients per server</td></tr>
+    <tr><td>Remote</td><td>No</td><td>Yes</td></tr>
+    <tr><td>Containers</td><td>Awkward</td><td>Natural</td></tr>
+    <tr><td>Debugging</td><td>stderr logs</td><td>Standard HTTP tooling</td></tr>
+  </tbody>
+</table>
+
+<h2>Security</h2>
+
+<h3>Current: No Auth on /mcp</h3>
+<p>MCP HTTP endpoint currently has no API key auth. Local-only binding (<code>127.0.0.1</code>) &mdash; not exposed to network by default.</p>
+
+<h3>Future: Production Layers</h3>
+<table>
+  <thead><tr><th>Layer</th><th>Approach</th></tr></thead>
+  <tbody>
+    <tr><td>TLS</td><td>HTTPS via reverse proxy (nginx, Caddy)</td></tr>
+    <tr><td>Auth</td><td>Bearer token validation on /mcp</td></tr>
+    <tr><td>Origin</td><td>CORS restrictions for browser clients</td></tr>
+    <tr><td>Rate limiting</td><td>Per-session request throttling</td></tr>
+    <tr><td>Session limits</td><td>Max concurrent sessions per user</td></tr>
+    <tr><td>Host validation</td><td>DNS rebinding protection middleware</td></tr>
+  </tbody>
+</table>
+
+<h2>Client Config Examples</h2>
+
+<h3>Claude Code (HTTP MCP)</h3>
+<pre><code>// .mcp.json
+{
+  "mcpServers": {
+    "ponderdb": {
+      "type": "url",
+      "url": "http://127.0.0.1:7437/mcp"
+    }
+  }
+}</code></pre>
+
+<h3>Generic MCP Client</h3>
+<pre><code>import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+
+const client = new Client({ name: "my-app", version: "1.0" });
+const transport = new StreamableHTTPClientTransport(
+  new URL("http://127.0.0.1:7437/mcp")
+);
+await client.connect(transport);
+
+const result = await client.callTool("remember", {
+  key: "test/hello",
+  content: "Hello from HTTP MCP"
+});</code></pre>
+
+<h2>Files</h2>
+
+<table>
+  <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td><code>packages/server/src/mcp-http.ts</code></td><td>HTTP MCP router with session management</td></tr>
+    <tr><td><code>packages/server/src/mcp.ts</code></td><td>MCP server creation (shared stdio + HTTP)</td></tr>
+    <tr><td><code>packages/server/src/app.ts</code></td><td>Mounts <code>/mcp</code> route</td></tr>
+    <tr><td><code>packages/server/src/bin.ts</code></td><td>Entry point &mdash; <code>mcp</code> arg = stdio, default = HTTP</td></tr>
+  </tbody>
+</table>
+
+<h2>Future Work</h2>
+
+<div class="card">
+  <ul style="margin-left:1.5rem;color:var(--muted)">
+    <li>OAuth 2.1 / DCR for remote deployments</li>
+    <li>Session persistence (survive server restarts)</li>
+    <li>WebSocket transport option (lower latency than SSE)</li>
+    <li>Session timeout / auto-cleanup</li>
+    <li>Per-session rate limiting</li>
+    <li>Load balancer sticky sessions for multi-instance</li>
+  </ul>
+</div>
+
+</body>
+</html>
