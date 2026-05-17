@@ -21,26 +21,38 @@ export function Search({ apiKey }: { apiKey: string }) {
     }
   };
 
-  if (!apiKey) return <div className="empty">Enter API key to search</div>;
+  if (!apiKey) {
+    return (
+      <div className="empty">
+        <p>Enter your API key in the sidebar to search</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="search-view">
-      <h2>Search Memories</h2>
+    <div>
+      <div className="page-header">
+        <h2>Search</h2>
+        <p>Find memories by meaning using semantic + keyword search</p>
+      </div>
+
       <form onSubmit={handleSearch} className="search-form">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by meaning..."
+          placeholder="Search memories by meaning..."
           autoFocus
         />
-        <button type="submit">Search</button>
+        <button type="submit" className="btn btn-primary">Search</button>
       </form>
 
       {error && <div className="error">{error}</div>}
 
       {searched && results.length === 0 && (
-        <div className="empty">No results found</div>
+        <div className="empty">
+          <p>No results found for "{query}"</p>
+        </div>
       )}
 
       <div className="search-results">

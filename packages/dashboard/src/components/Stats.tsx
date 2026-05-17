@@ -12,10 +12,10 @@ export function Stats({ apiKey }: { apiKey: string }) {
   }, [apiKey]);
 
   return (
-    <div className="stats">
-      <div className="stat-item">
-        <span className="stat-value">{total ?? "—"}</span>
-        <span className="stat-label">memories</span>
+    <div className="stats-bar">
+      <div className="stat-card">
+        <div className="stat-value">{total ?? "—"}</div>
+        <div className="stat-label">Total Memories</div>
       </div>
     </div>
   );

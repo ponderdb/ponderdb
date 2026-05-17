@@ -34,7 +34,7 @@ export function ApiKeys({ apiKey }: { apiKey: string }) {
   };
 
   const handleRevoke = async (id: string, name: string) => {
-    if (!confirm(`Revoke API key "${name}"?`)) return;
+    if (!confirm(`Revoke API key "${name}"? This cannot be undone.`)) return;
     try {
       await revokeApiKey(apiKey, id);
       load();
@@ -43,64 +43,83 @@ export function ApiKeys({ apiKey }: { apiKey: string }) {
     }
   };
 
-  if (!apiKey) return <div className="empty">Enter API key to manage keys</div>;
+  if (!apiKey) {
+    return (
+      <div className="empty">
+        <p>Enter your API key in the sidebar to manage keys</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="api-keys">
-      <h2>API Keys</h2>
+    <div>
+      <div className="page-header">
+        <h2>API Keys</h2>
+        <p>Create and manage API keys for REST API access</p>
+      </div>
 
       <form onSubmit={handleCreate} className="create-key-form">
         <input
           type="text"
           value={newKeyName}
           onChange={(e) => setNewKeyName(e.target.value)}
-          placeholder="Key name..."
+          placeholder="Key name (e.g. my-script)"
         />
-        <button type="submit">Create Key</button>
+        <button type="submit" className="btn btn-primary">Create Key</button>
       </form>
 
       {newKeyValue && (
         <div className="new-key-banner">
-          <strong>New key created (copy now — shown once):</strong>
+          <strong>New key created — copy now, shown only once:</strong>
           <code>{newKeyValue}</code>
-          <button onClick={() => { navigator.clipboard.writeText(newKeyValue); }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => { navigator.clipboard.writeText(newKeyValue); }}
+          >
             Copy
           </button>
-          <button onClick={() => setNewKeyValue("")}>Dismiss</button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => setNewKeyValue("")}
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
       {error && <div className="error">{error}</div>}
 
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Prefix</th>
-            <th>Created</th>
-            <th>Last Used</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {keys.map((k) => (
-            <tr key={k.id}>
-              <td>{k.name}</td>
-              <td><code>{k.prefix}...</code></td>
-              <td>{new Date(k.createdAt).toLocaleDateString()}</td>
-              <td>{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : "Never"}</td>
-              <td>
-                <button className="delete-btn" onClick={() => handleRevoke(k.id, k.name)}>
-                  Revoke
-                </button>
-              </td>
+      <div className="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Prefix</th>
+              <th>Created</th>
+              <th>Last Used</th>
+              <th style={{ width: 80 }}></th>
             </tr>
-          ))}
-          {keys.length === 0 && (
-            <tr><td colSpan={5} className="empty-row">No API keys</td></tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {keys.map((k) => (
+              <tr key={k.id}>
+                <td style={{ fontWeight: 500 }}>{k.name}</td>
+                <td><code>{k.prefix}...</code></td>
+                <td className="date-cell">{new Date(k.createdAt).toLocaleDateString()}</td>
+                <td className="date-cell">{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : "Never"}</td>
+                <td>
+                  <button className="btn btn-danger btn-sm" onClick={() => handleRevoke(k.id, k.name)}>
+                    Revoke
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {keys.length === 0 && (
+              <tr><td colSpan={5} className="empty-row">No API keys found</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
