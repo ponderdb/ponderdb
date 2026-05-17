@@ -167,13 +167,25 @@ Same pattern — add MCP server config pointing to the PonderDB binary with `mcp
 
 ### MCP over HTTP (Streamable HTTP)
 
-For tools that support HTTP-based MCP (instead of stdio), PonderDB exposes an MCP endpoint at `/mcp` when running in HTTP mode:
+For tools that support HTTP-based MCP (instead of stdio), PonderDB exposes an MCP endpoint at `/mcp` when running in HTTP mode.
 
+Add to your MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "ponderdb": {
+      "type": "streamable-http",
+      "url": "http://127.0.0.1:7437/mcp",
+      "headers": {
+        "Authorization": "Bearer pndr_YOUR_KEY"
+      }
+    }
+  }
+}
 ```
-MCP Endpoint: http://127.0.0.1:7437/mcp
-Transport:    Streamable HTTP (POST /mcp)
-Sessions:     Stateful (session ID in mcp-session-id header)
-```
+
+> **Auth:** The HTTP MCP endpoint requires a valid PonderDB API key via the `Authorization` header (same key used for REST API). This replaces the need for session-based auth — your API key authenticates every request.
 
 This is useful for remote access, ChatGPT integrations, or when stdio is not available. The HTTP MCP endpoint is always available when the server is running — no extra config needed.
 
@@ -263,7 +275,7 @@ All endpoints require `Authorization: Bearer pndr_xxx` header (unless auth is di
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `ALL` | `/mcp` | MCP over HTTP endpoint (no auth, session-based) |
+| `ALL` | `/mcp` | MCP over HTTP endpoint (API key auth required) |
 | `GET` | `/health` | Health check (no auth) |
 | `GET` | `/api/memories` | List memories (paginated, filterable) |
 | `POST` | `/api/memories` | Create a memory |
