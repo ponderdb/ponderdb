@@ -4,6 +4,7 @@ import { SqliteStore } from "@ponderdb/sqlite-store";
 import { expandPath, DEFAULT_CONFIG } from "@ponderdb/core";
 import { createApp } from "./app.js";
 import { createMcpServer } from "./mcp.js";
+import { TransformerEmbeddingProvider } from "./embedder/transformer.js";
 import { LocalEmbeddingProvider } from "./embedder/local.js";
 
 const mode = process.argv[2] ?? "http";
@@ -17,8 +18,23 @@ async function main() {
   const store = new SqliteStore(dataDir);
   await store.init();
 
-  // Initialize embedder (local placeholder for MVP)
-  const embedder = new LocalEmbeddingProvider();
+  // Initialize embedder — real transformer model, falls back to hash-based
+  let embedder;
+  if (process.env.PONDER_EMBEDDER === "local") {
+    embedder = new LocalEmbeddingProvider();
+    console.log("Embedder: hash-based (local placeholder)");
+  } else {
+    console.log("Embedder: all-MiniLM-L6-v2 (loading model...)");
+    try {
+      embedder = new TransformerEmbeddingProvider(dataDir);
+      // Warm up — triggers model download on first run
+      await embedder.embed("warmup");
+      console.log("Embedder: all-MiniLM-L6-v2 (ready)");
+    } catch (err) {
+      console.error("Failed to load transformer model, falling back to hash-based:", err);
+      embedder = new LocalEmbeddingProvider();
+    }
+  }
 
   if (mode === "mcp") {
     // MCP stdio mode — used by Claude, Cursor, Copilot, etc.
