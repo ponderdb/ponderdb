@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-type View = "memories" | "search" | "keys";
+type View = "dashboard" | "memories" | "search" | "categories" | "keys";
 
 interface LayoutProps {
   children: ReactNode;
@@ -12,8 +12,10 @@ interface LayoutProps {
 }
 
 const NAV: { id: View; label: string; icon: string }[] = [
+  { id: "dashboard", label: "Dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" },
   { id: "memories", label: "Memories", icon: "M4 6h16M4 12h16M4 18h7" },
   { id: "search", label: "Search", icon: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" },
+  { id: "categories", label: "Categories", icon: "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" },
   { id: "keys", label: "API Keys", icon: "M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" },
 ];
 
