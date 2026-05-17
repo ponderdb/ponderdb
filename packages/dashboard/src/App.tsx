@@ -25,7 +25,7 @@ export function App() {
     localStorage.setItem("ponderdb_api_key", apiKey);
   }, [apiKey]);
 
-  if (healthy === null) return <div className="loading">Connecting...</div>;
+  if (healthy === null) return <div className="loading">Connecting to PonderDB...</div>;
   if (healthy === false)
     return (
       <div className="error-page">
@@ -35,24 +35,17 @@ export function App() {
     );
 
   return (
-    <Layout view={view} onViewChange={setView}>
-      <div className="top-bar">
-        <Stats apiKey={apiKey} />
-        <div className="api-key-input">
-          <label>API Key</label>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="pndr_..."
-          />
-        </div>
-      </div>
-      <div className="content">
-        {view === "memories" && <MemoryList apiKey={apiKey} />}
-        {view === "search" && <Search apiKey={apiKey} />}
-        {view === "keys" && <ApiKeys apiKey={apiKey} />}
-      </div>
+    <Layout
+      view={view}
+      onViewChange={setView}
+      apiKey={apiKey}
+      onApiKeyChange={setApiKey}
+      healthy={true}
+    >
+      <Stats apiKey={apiKey} />
+      {view === "memories" && <MemoryList apiKey={apiKey} />}
+      {view === "search" && <Search apiKey={apiKey} />}
+      {view === "keys" && <ApiKeys apiKey={apiKey} />}
     </Layout>
   );
 }

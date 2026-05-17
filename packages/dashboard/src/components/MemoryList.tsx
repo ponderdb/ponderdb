@@ -58,7 +58,13 @@ export function MemoryList({ apiKey }: { apiKey: string }) {
     }
   };
 
-  if (!apiKey) return <div className="empty">Enter API key to view memories</div>;
+  if (!apiKey) {
+    return (
+      <div className="empty">
+        <p>Enter your API key in the sidebar to view memories</p>
+      </div>
+    );
+  }
 
   if (selected) {
     return (
@@ -71,19 +77,26 @@ export function MemoryList({ apiKey }: { apiKey: string }) {
   }
 
   return (
-    <div className="memory-list">
-      <div className="list-header">
+    <div>
+      <div className="page-header">
         <h2>Memories</h2>
+        <p>Browse and manage all stored memories</p>
+      </div>
+
+      <div className="filter-bar">
         <select value={category} onChange={(e) => { setCategory(e.target.value); setOffset(0); }}>
           {CATEGORIES.map((c) => (
             <option key={c} value={c}>{c || "All categories"}</option>
           ))}
         </select>
+        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+          {total} {total === 1 ? "memory" : "memories"}
+        </span>
       </div>
 
       {error && <div className="error">{error}</div>}
 
-      <div className="table-wrap">
+      <div className="table-container">
         <table>
           <thead>
             <tr>
@@ -100,7 +113,7 @@ export function MemoryList({ apiKey }: { apiKey: string }) {
                 <td className="key-cell">{m.key}</td>
                 <td><span className={`badge cat-${m.category}`}>{m.category}</span></td>
                 <td><span className={`badge imp-${m.importance}`}>{m.importance}</span></td>
-                <td className="tags-cell">{m.tags.join(", ")}</td>
+                <td className="tags-cell">{m.tags.join(", ") || "—"}</td>
                 <td className="date-cell">{new Date(m.updatedAt).toLocaleDateString()}</td>
               </tr>
             ))}
@@ -111,15 +124,25 @@ export function MemoryList({ apiKey }: { apiKey: string }) {
         </table>
       </div>
 
-      <div className="pagination">
-        <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>
-          Previous
-        </button>
-        <span>{offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}</span>
-        <button disabled={offset + PAGE_SIZE >= total} onClick={() => setOffset(offset + PAGE_SIZE)}>
-          Next
-        </button>
-      </div>
+      {total > PAGE_SIZE && (
+        <div className="pagination">
+          <button
+            className="btn btn-secondary btn-sm"
+            disabled={offset === 0}
+            onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+          >
+            Previous
+          </button>
+          <span>{offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}</span>
+          <button
+            className="btn btn-secondary btn-sm"
+            disabled={offset + PAGE_SIZE >= total}
+            onClick={() => setOffset(offset + PAGE_SIZE)}
+          >
+            Next
+          </button>
+        </div>
+      )}
     </div>
   );
 }
