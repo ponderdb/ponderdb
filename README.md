@@ -175,7 +175,7 @@ Add to your MCP client config:
 {
   "mcpServers": {
     "ponderdb": {
-      "type": "streamable-http",
+      "type": "http",
       "url": "http://127.0.0.1:7437/mcp",
       "headers": {
         "Authorization": "Bearer pndr_YOUR_KEY"
