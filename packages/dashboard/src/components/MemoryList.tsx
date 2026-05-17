@@ -23,6 +23,7 @@ export function MemoryList({ apiKey }: { apiKey: string }) {
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [category, setCategory] = useState("");
+  const [searchText, setSearchText] = useState("");
   const [selected, setSelected] = useState<Memory | null>(null);
   const [error, setError] = useState("");
 
@@ -76,6 +77,18 @@ export function MemoryList({ apiKey }: { apiKey: string }) {
     );
   }
 
+  // Client-side text filter on loaded memories
+  const filtered = searchText
+    ? memories.filter((m) => {
+        const q = searchText.toLowerCase();
+        return (
+          m.key.toLowerCase().includes(q) ||
+          m.content.toLowerCase().includes(q) ||
+          m.tags.some((t) => t.toLowerCase().includes(q))
+        );
+      })
+    : memories;
+
   return (
     <div>
       <div className="page-header">
@@ -84,13 +97,22 @@ export function MemoryList({ apiKey }: { apiKey: string }) {
       </div>
 
       <div className="filter-bar">
-        <select value={category} onChange={(e) => { setCategory(e.target.value); setOffset(0); }}>
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>{c || "All categories"}</option>
-          ))}
-        </select>
-        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-          {total} {total === 1 ? "memory" : "memories"}
+        <div className="filter-group">
+          <input
+            type="text"
+            className="filter-search"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            placeholder="Filter by key, content, or tag..."
+          />
+          <select value={category} onChange={(e) => { setCategory(e.target.value); setOffset(0); }}>
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>{c || "All categories"}</option>
+            ))}
+          </select>
+        </div>
+        <span style={{ fontSize: 12, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+          {searchText ? `${filtered.length} of ${total}` : `${total}`} {total === 1 ? "memory" : "memories"}
         </span>
       </div>
 
@@ -108,7 +130,7 @@ export function MemoryList({ apiKey }: { apiKey: string }) {
             </tr>
           </thead>
           <tbody>
-            {memories.map((m) => (
+            {filtered.map((m) => (
               <tr key={m.id} onClick={() => setSelected(m)} className="clickable">
                 <td className="key-cell">{m.key}</td>
                 <td><span className={`badge cat-${m.category}`}>{m.category}</span></td>
@@ -117,14 +139,16 @@ export function MemoryList({ apiKey }: { apiKey: string }) {
                 <td className="date-cell">{new Date(m.updatedAt).toLocaleDateString()}</td>
               </tr>
             ))}
-            {memories.length === 0 && (
-              <tr><td colSpan={5} className="empty-row">No memories found</td></tr>
+            {filtered.length === 0 && (
+              <tr><td colSpan={5} className="empty-row">
+                {searchText ? `No memories matching "${searchText}"` : "No memories found"}
+              </td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {total > PAGE_SIZE && (
+      {!searchText && total > PAGE_SIZE && (
         <div className="pagination">
           <button
             className="btn btn-secondary btn-sm"

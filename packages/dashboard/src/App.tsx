@@ -1,18 +1,19 @@
 import { useState, useEffect } from "react";
 import { Layout } from "./components/Layout";
+import { Dashboard } from "./components/Dashboard";
 import { MemoryList } from "./components/MemoryList";
 import { Search } from "./components/Search";
-import { Stats } from "./components/Stats";
+import { Categories } from "./components/Categories";
 import { ApiKeys } from "./components/ApiKeys";
 import { fetchHealth } from "./api";
 
-type View = "memories" | "search" | "keys";
+type View = "dashboard" | "memories" | "search" | "categories" | "keys";
 
 export function App() {
   const [apiKey, setApiKey] = useState(
     () => localStorage.getItem("ponderdb_api_key") || "",
   );
-  const [view, setView] = useState<View>("memories");
+  const [view, setView] = useState<View>("dashboard");
   const [healthy, setHealthy] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -42,9 +43,10 @@ export function App() {
       onApiKeyChange={setApiKey}
       healthy={true}
     >
-      <Stats apiKey={apiKey} />
+      {view === "dashboard" && <Dashboard apiKey={apiKey} />}
       {view === "memories" && <MemoryList apiKey={apiKey} />}
       {view === "search" && <Search apiKey={apiKey} />}
+      {view === "categories" && <Categories apiKey={apiKey} />}
       {view === "keys" && <ApiKeys apiKey={apiKey} />}
     </Layout>
   );
