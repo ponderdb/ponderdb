@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Web Dashboard — PonderDB</title>
+<style>
+  :root { --bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--accent:#58a6ff;--green:#3fb950;--purple:#d2a8ff;--orange:#f0883e;--red:#f85149;--code-bg:#1c2128; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;padding:2rem;max-width:1200px;margin:0 auto}
+  h1{font-size:2rem;color:var(--accent);margin-bottom:0.5rem}
+  h2{font-size:1.4rem;color:var(--purple);margin-top:2.5rem;margin-bottom:1rem;border-bottom:1px solid var(--border);padding-bottom:0.5rem}
+  h3{font-size:1.1rem;color:var(--green);margin-top:1.5rem;margin-bottom:0.75rem}
+  p{margin-bottom:1rem}
+  table{width:100%;border-collapse:collapse;margin:1rem 0 1.5rem;font-size:0.88rem}
+  th{background:var(--surface);color:var(--accent);text-align:left;padding:0.6rem;border:1px solid var(--border);font-weight:600}
+  td{padding:0.5rem 0.6rem;border:1px solid var(--border)}
+  tr:nth-child(even){background:rgba(22,27,34,0.5)}
+  code{background:var(--code-bg);padding:0.1rem 0.35rem;border-radius:4px;font-size:0.83em;color:var(--orange)}
+  pre{background:var(--code-bg);padding:1rem;border-radius:8px;overflow-x:auto;margin:1rem 0;border:1px solid var(--border);font-size:0.82rem;line-height:1.5}
+  pre code{background:none;padding:0;color:var(--text)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin:1rem 0}
+  .card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin:1.5rem 0}
+  .highlight{background:rgba(88,166,255,0.08);border-left:3px solid var(--accent);padding:1rem 1.5rem;margin:1rem 0;border-radius:0 8px 8px 0}
+  .badge{display:inline-block;padding:0.15rem 0.5rem;border-radius:10px;font-size:0.72rem;font-weight:600;margin-right:0.3rem}
+  .badge-green{background:rgba(63,185,80,0.15);color:var(--green)}
+  .badge-blue{background:rgba(88,166,255,0.15);color:var(--accent)}
+  .badge-purple{background:rgba(210,168,255,0.15);color:var(--purple)}
+  .badge-orange{background:rgba(240,136,62,0.15);color:var(--orange)}
+  .badge-red{background:rgba(248,81,73,0.15);color:var(--red)}
+  .nav{display:flex;gap:0.5rem;flex-wrap:wrap;margin:1rem 0 2rem}
+  .nav a{background:var(--surface);border:1px solid var(--border);padding:0.4rem 0.8rem;border-radius:8px;font-size:0.82rem;color:var(--accent);text-decoration:none}
+  .nav a:hover{background:rgba(88,166,255,0.1);border-color:var(--accent)}
+  .color-swatch{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:middle;margin-right:0.4rem}
+  @media(max-width:768px){body{padding:1rem}.card-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<h1>Web Dashboard</h1>
+<p style="color:var(--muted)">Built-in React dashboard at <code>localhost:7437</code></p>
+
+<div class="nav">
+  <a href="index.html">&larr; Index</a>
+  <a href="master-plan.html">Master Plan</a>
+  <a href="http-mcp-transport.html">HTTP MCP</a>
+  <a href="system-design.html">System Design</a>
+  <a href="ai-integrations.html">AI Integrations</a>
+</div>
+
+<h2>Tech Stack</h2>
+
+<table>
+  <thead><tr><th>Layer</th><th>Technology</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td>Framework</td><td>React 19</td><td>Lightweight, component-based</td></tr>
+    <tr><td>Build</td><td>Vite 6</td><td>Fast builds, HMR, proxying</td></tr>
+    <tr><td>Styling</td><td>Vanilla CSS (custom properties)</td><td>No dependency, full control</td></tr>
+    <tr><td>API</td><td>Fetch &rarr; REST API</td><td>Same-origin, no CORS issues</td></tr>
+    <tr><td>Serving</td><td>Hono <code>serveStatic</code></td><td>Single port, zero config</td></tr>
+  </tbody>
+</table>
+
+<h2>Features</h2>
+
+<div class="card-grid">
+  <div class="card">
+    <h3>Memory Browser</h3>
+    <p style="color:var(--muted)">Paginated table (20/page) with category filter dropdown. Click row for detail view. Columns: Key, Category, Importance, Tags, Updated.</p>
+  </div>
+  <div class="card">
+    <h3>Memory Detail</h3>
+    <p style="color:var(--muted)">Full content display, category + importance badges, tags, metadata grid (ID, project, dates, access count, version). Delete with confirmation.</p>
+  </div>
+  <div class="card">
+    <h3>Semantic Search</h3>
+    <p style="color:var(--muted)">Natural language query input. Results show key, match type (vector/keyword), relevance score (%), content preview (300 chars).</p>
+  </div>
+  <div class="card">
+    <h3>API Key Management</h3>
+    <p style="color:var(--muted)">Create keys (name input), one-time display with copy button. Table: name, prefix, created, last used. Revoke with confirmation.</p>
+  </div>
+</div>
+
+<h2>Architecture</h2>
+
+<pre><code>packages/dashboard/
+&boxvr;&boxh; index.html              &mdash; Vite entry
+&boxvr;&boxh; vite.config.ts          &mdash; Build config + dev proxy
+&boxvr;&boxh; tsconfig.json
+&boxvr;&boxh; package.json
+&boxur;&boxh; src/
+    &boxvr;&boxh; main.tsx            &mdash; React root
+    &boxvr;&boxh; App.tsx             &mdash; Router + top-level state
+    &boxvr;&boxh; api.ts              &mdash; REST API client functions
+    &boxvr;&boxh; components/
+    &boxv;   &boxvr;&boxh; Layout.tsx      &mdash; Sidebar + navigation
+    &boxv;   &boxvr;&boxh; Stats.tsx       &mdash; Memory count display
+    &boxv;   &boxvr;&boxh; MemoryList.tsx  &mdash; Paginated memory table
+    &boxv;   &boxvr;&boxh; MemoryDetail.tsx&mdash; Single memory view
+    &boxv;   &boxvr;&boxh; Search.tsx      &mdash; Semantic search
+    &boxv;   &boxur;&boxh; ApiKeys.tsx     &mdash; API key management
+    &boxur;&boxh; styles/
+        &boxur;&boxh; global.css      &mdash; Full stylesheet</code></pre>
+
+<h3>Serving Strategy</h3>
+
+<div class="highlight">
+  <p>Dashboard builds to <code>packages/dashboard/dist/</code>. Server detects this directory at startup and serves static files. Route priority: <code>/api/*</code> and <code>/mcp</code> first, everything else falls through to static files with SPA fallback.</p>
+</div>
+
+<pre><code>// In app.ts
+const dashboardDist = resolve(__dirname, "../../dashboard/dist");
+if (existsSync(dashboardDist)) {
+  app.use("/*", serveStatic({ root: dashboardDist }));
+  app.get("*", serveStatic({ root: dashboardDist,
+    rewriteRequestPath: () =&gt; "/index.html" }));
+}</code></pre>
+
+<h2>Design System</h2>
+
+<h3>Theme: Dark</h3>
+
+<table>
+  <thead><tr><th>Variable</th><th>Value</th><th>Usage</th></tr></thead>
+  <tbody>
+    <tr><td><code>--bg</code></td><td><span class="color-swatch" style="background:#0a0a0f"></span><code>#0a0a0f</code></td><td>Page background</td></tr>
+    <tr><td><code>--bg-surface</code></td><td><span class="color-swatch" style="background:#12121a"></span><code>#12121a</code></td><td>Cards, panels</td></tr>
+    <tr><td><code>--accent</code></td><td><span class="color-swatch" style="background:#6c5ce7"></span><code>#6c5ce7</code></td><td>Purple accent, buttons</td></tr>
+    <tr><td><code>--danger</code></td><td><span class="color-swatch" style="background:#e74c3c"></span><code>#e74c3c</code></td><td>Delete, errors</td></tr>
+    <tr><td><code>--success</code></td><td><span class="color-swatch" style="background:#2ecc71"></span><code>#2ecc71</code></td><td>Success states</td></tr>
+  </tbody>
+</table>
+
+<h3>Category Colors</h3>
+
+<p>
+  <span class="badge" style="background:rgba(116,185,255,0.15);color:#74b9ff">architecture</span>
+  <span class="badge" style="background:rgba(231,76,60,0.15);color:#e74c3c">bug</span>
+  <span class="badge" style="background:rgba(46,204,113,0.15);color:#2ecc71">pattern</span>
+  <span class="badge" style="background:rgba(243,156,18,0.15);color:#f39c12">config</span>
+  <span class="badge" style="background:rgba(162,155,254,0.15);color:#a29bfe">decision</span>
+  <span class="badge" style="background:rgba(253,121,168,0.15);color:#fd79a8">snippet</span>
+  <span class="badge" style="background:rgba(255,234,167,0.15);color:#ffeaa7">debug</span>
+  <span class="badge" style="background:rgba(0,206,201,0.15);color:#00cec9">workflow</span>
+  <span class="badge" style="background:rgba(225,112,85,0.15);color:#e17055">dependency</span>
+  <span class="badge" style="background:rgba(178,190,195,0.15);color:#b2bec3">custom</span>
+</p>
+
+<h3>Importance Colors</h3>
+
+<p>
+  <span class="badge badge-green">low</span>
+  <span class="badge badge-orange">medium</span>
+  <span class="badge" style="background:rgba(225,112,85,0.15);color:#e17055">high</span>
+  <span class="badge badge-red">critical</span>
+</p>
+
+<h2>API Client</h2>
+
+<table>
+  <thead><tr><th>Function</th><th>Method</th><th>Endpoint</th></tr></thead>
+  <tbody>
+    <tr><td><code>fetchHealth()</code></td><td>GET</td><td><code>/health</code></td></tr>
+    <tr><td><code>listMemories()</code></td><td>GET</td><td><code>/api/memories?...</code></td></tr>
+    <tr><td><code>searchMemories()</code></td><td>POST</td><td><code>/api/memories/search</code></td></tr>
+    <tr><td><code>getMemory()</code></td><td>GET</td><td><code>/api/memories/:key</code></td></tr>
+    <tr><td><code>deleteMemory()</code></td><td>DELETE</td><td><code>/api/memories/:key</code></td></tr>
+    <tr><td><code>listApiKeys()</code></td><td>GET</td><td><code>/api/auth/keys</code></td></tr>
+    <tr><td><code>createApiKey()</code></td><td>POST</td><td><code>/api/auth/keys</code></td></tr>
+    <tr><td><code>revokeApiKey()</code></td><td>DELETE</td><td><code>/api/auth/keys/:id</code></td></tr>
+  </tbody>
+</table>
+
+<h2>Build Output</h2>
+
+<div class="card">
+  <table>
+    <tr><td><code>dist/index.html</code></td><td>0.47 kB</td></tr>
+    <tr><td><code>dist/assets/index-*.css</code></td><td>6.82 kB (gzip: 1.82 kB)</td></tr>
+    <tr><td><code>dist/assets/index-*.js</code></td><td>205.19 kB (gzip: 63.85 kB)</td></tr>
+    <tr><td><strong>Total</strong></td><td><strong>~212 kB raw, ~66 kB gzipped</strong></td></tr>
+  </table>
+</div>
+
+<h2>Development</h2>
+
+<pre><code># Terminal 1: API server
+npm run dev --workspace=@ponderdb/server
+
+# Terminal 2: Dashboard with HMR
+npm run dev --workspace=@ponderdb/dashboard
+# Vite proxies /api/* and /mcp to localhost:7437</code></pre>
+
+<h2>Future Enhancements</h2>
+
+<div class="card-grid">
+  <div class="card">
+    <h3 style="color:var(--red)">High Priority</h3>
+    <ul style="margin-left:1.5rem;color:var(--muted);font-size:0.9rem">
+      <li>Memory create/edit form</li>
+      <li>Real-time updates (WebSocket)</li>
+      <li>Import/export (JSON, CSV)</li>
+      <li>Bulk operations</li>
+      <li>Category analytics charts</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="color:var(--orange)">Medium Priority</h3>
+    <ul style="margin-left:1.5rem;color:var(--muted);font-size:0.9rem">
+      <li>Version history viewer</li>
+      <li>Project filter/switcher</li>
+      <li>Keyboard shortcuts</li>
+      <li>Responsive mobile layout</li>
+      <li>Dark/light theme toggle</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Design Decisions</h2>
+
+<div class="highlight">
+  <p><strong>Why no UI framework?</strong> Dashboard is small (~6 components). Vanilla CSS with custom properties = zero dependency, 6.8 kB total. A framework would be larger.</p>
+</div>
+
+<div class="highlight">
+  <p><strong>Why same port?</strong> Zero extra config. No CORS. Single process. <code>npm run dev</code> &rarr; everything works. Dashboard is optional &mdash; if dist doesn&rsquo;t exist, server still works.</p>
+</div>
+
+<div class="highlight">
+  <p><strong>Why localStorage for API key?</strong> Simple persistence. Dashboard is local-only (localhost), security risk is minimal. No cookies to manage.</p>
+</div>
+
+</body>
+</html>
