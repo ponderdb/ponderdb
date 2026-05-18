@@ -1,6 +1,6 @@
 {
   "name": "@ponderdb/sqlite-store",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "PonderDB SQLite + sqlite-vec storage adapter for local-first mode",
   "type": "module",
   "main": "./dist/index.js",
@@ -17,14 +17,14 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@ponderdb/core": "0.1.0",
+    "@ponderdb/core": "0.1.1",
     "better-sqlite3": "^11.7.0",
     "sqlite-vec": "^0.1.9"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12"
   },
-  "files": ["dist"],
+  "files": ["dist", "README.md"],
   "publishConfig": {
     "access": "public"
   },

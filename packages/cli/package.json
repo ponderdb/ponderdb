@@ -1,6 +1,6 @@
 {
   "name": "@ponderdb/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "PonderDB CLI — terminal interface for memory management",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,13 +20,13 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@ponderdb/sdk": "0.1.0",
+    "@ponderdb/sdk": "0.1.1",
     "commander": "^13.1.0"
   },
   "devDependencies": {
     "tsx": "^4.19.4"
   },
-  "files": ["dist"],
+  "files": ["dist", "README.md"],
   "publishConfig": {
     "access": "public"
   },
