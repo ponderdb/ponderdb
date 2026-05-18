@@ -1,6 +1,6 @@
 {
   "name": "@ponderdb/server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "PonderDB server — Hono REST API + MCP server",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,15 +24,15 @@
     "@hono/node-server": "^1.14.1",
     "@huggingface/transformers": "^4.2.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "@ponderdb/core": "0.1.0",
-    "@ponderdb/sqlite-store": "0.1.0",
+    "@ponderdb/core": "0.1.1",
+    "@ponderdb/sqlite-store": "0.1.1",
     "hono": "^4.7.6",
     "zod": "^3.24.4"
   },
   "devDependencies": {
     "tsx": "^4.19.4"
   },
-  "files": ["dist"],
+  "files": ["dist", "README.md"],
   "publishConfig": {
     "access": "public"
   },
