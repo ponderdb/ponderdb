@@ -164,6 +164,24 @@ export class SqliteStore implements StorageAdapter {
       tx();
     }
 
+    // Auto-create project rows for any existing memory project_ids that don't have a project entry
+    const orphanProjects = this.db.prepare(`
+      SELECT DISTINCT project_id FROM memories
+      WHERE project_id IS NOT NULL
+        AND project_id NOT IN (SELECT slug FROM projects)
+    `).all() as { project_id: string }[];
+    if (orphanProjects.length > 0) {
+      const insertProject = this.db.prepare(
+        "INSERT OR IGNORE INTO projects (id, name, slug, description, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))"
+      );
+      const tx = this.db.transaction(() => {
+        for (const row of orphanProjects) {
+          insertProject.run(generateId(), row.project_id, row.project_id, "");
+        }
+      });
+      tx();
+    }
+
     // Create sqlite-vec virtual table for vector search
     this.db.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING vec0(
