@@ -1,8 +1,10 @@
 # @ponderdb/cli
 
-Command-line interface for PonderDB — manage AI agent memories from the terminal.
+Terminal interface for PonderDB — manage AI agent memories from command line.
 
-## Installation
+Requires a running [PonderDB server](https://www.npmjs.com/package/@ponderdb/server).
+
+## Install
 
 ```bash
 npm install -g @ponderdb/cli
@@ -11,91 +13,25 @@ npm install -g @ponderdb/cli
 ## Setup
 
 ```bash
-export PONDER_API_KEY=pndr_YOUR_KEY              # API key
-export PONDER_URL=http://127.0.0.1:7437          # Server URL (default)
+export PONDER_API_KEY=pndr_YOUR_KEY
 ```
 
 ## Commands
 
-### Remember (Store)
-
 ```bash
-ponder remember "auth/jwt-config" "JWT uses RS256 with 15min expiry" \
-  --category config \
-  --importance high \
-  --tags auth,jwt \
-  --project my-backend-api
-```
-
-### Recall (Get)
-
-```bash
-ponder recall "auth/jwt-config" --project my-backend-api
-```
-
-Output:
-```
-auth/jwt-config [config, high]
-JWT uses RS256 with 15min expiry
-
-Tags: auth, jwt
-Updated: 2025-05-18T10:30:00.000Z
-Access count: 3
-```
-
-### Search
-
-```bash
-ponder search "how does authentication work" \
-  --category config \
-  --limit 5 \
-  --project my-backend-api
-```
-
-### List
-
-```bash
-ponder list \
-  --category architecture \
-  --limit 20 \
-  --project my-backend-api
-```
-
-### Forget (Delete)
-
-```bash
-ponder forget "auth/jwt-config" --project my-backend-api
-```
-
-### Stats
-
-```bash
+ponder remember "auth/jwt" "RS256, 15min expiry" --project my-project --tags auth,jwt
+ponder recall "auth/jwt" --project my-project
+ponder search "authentication" --limit 5 --project my-project
+ponder list --category config --limit 20 --project my-project
+ponder forget "auth/jwt" --project my-project
 ponder stats
 ```
 
-## Options
+## Getting API Key & Project ID
 
-All commands support:
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--project <id>` | `-p` | Project ID (slug) |
-| `--category <cat>` | `-c` | Category filter |
-| `--importance <imp>` | `-i` | Importance level |
-| `--tags <t1,t2>` | `-t` | Comma-separated tags |
-| `--limit <n>` | `-l` | Max results |
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PONDER_URL` | `http://127.0.0.1:7437` | PonderDB server URL |
-| `PONDER_API_KEY` | _(none)_ | API key for authentication |
-
-## Requirements
-
-- Node.js >= 22
-- PonderDB server running
+1. Run `ponderdb-server` and open `http://127.0.0.1:7437`
+2. API key shown on first start — or create one in **API Keys**
+3. Create a project in **Projects** — the slug is your project ID
 
 ## License
 
