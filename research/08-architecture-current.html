@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PonderDB - Architecture & Implementation Plan</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #f8f9fb;
+    --surface: #ffffff;
+    --text: #1a1d23;
+    --text2: #5a6070;
+    --muted: #8b90a0;
+    --accent: #4f46e5;
+    --accent-light: #eef2ff;
+    --border: #e2e5ea;
+    --green: #10b981;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --purple: #8b5cf6;
+    --pink: #ec4899;
+    --cyan: #06b6d4;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 32px;
+  }
+  h1 {
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  h1 + p { color: var(--text2); font-size: 16px; margin-bottom: 32px; }
+  h2 {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 48px 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+    letter-spacing: -0.3px;
+  }
+  h3 { font-size: 17px; font-weight: 600; margin: 28px 0 12px; }
+  p { margin: 10px 0; color: var(--text2); }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 16px 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .card h3 { margin-top: 0; }
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin: 20px 0;
+    overflow-x: auto;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .diagram-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    font-size: 14px;
+  }
+  th {
+    background: var(--bg);
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid #eef0f3;
+    color: var(--text2);
+  }
+  tr:last-child td { border-bottom: none; }
+  code {
+    font-family: "JetBrains Mono", "Fira Code", monospace;
+    font-size: 13px;
+    background: #f0f2f5;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--accent);
+  }
+  pre {
+    background: #1e1e2e;
+    color: #cdd6f4;
+    padding: 20px;
+    border-radius: 10px;
+    overflow-x: auto;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 16px 0;
+  }
+  pre code { background: none; color: inherit; padding: 0; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .badge-done { background: #d1fae5; color: #047857; }
+  .badge-planned { background: #e9d5ff; color: #7c3aed; }
+  .badge-current { background: #dbeafe; color: #1d4ed8; }
+  .stats-bar {
+    display: flex;
+    gap: 16px;
+    margin: 20px 0;
+    flex-wrap: wrap;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    flex: 1;
+    min-width: 150px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .stat:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+  .stat-value { font-size: 28px; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 12px; color: var(--muted); font-weight: 500; margin-top: 4px; }
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 24px 0;
+  }
+  .toc ol { padding-left: 20px; }
+  .toc li { margin: 6px 0; }
+  .toc a { color: var(--accent); text-decoration: none; font-weight: 500; font-size: 14px; }
+  .toc a:hover { text-decoration: underline; }
+  .phase {
+    display: flex;
+    gap: 16px;
+    margin: 16px 0;
+    flex-wrap: wrap;
+  }
+  .phase-card {
+    flex: 1;
+    min-width: 250px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .phase-card h4 { font-size: 15px; margin-bottom: 8px; }
+  .phase-card ul { padding-left: 18px; color: var(--text2); font-size: 13px; }
+  .phase-card li { margin: 4px 0; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+  .nav { position: sticky; top: 0; background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 32px; z-index: 10; }
+  .nav-inner { max-width: 960px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
+  .nav-logo { font-size: 18px; font-weight: 700; color: var(--accent); }
+  .nav-tag { font-size: 11px; background: var(--bg); color: var(--muted); padding: 2px 8px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-inner">
+    <span class="nav-logo">PonderDB</span>
+    <span class="nav-tag">Architecture Doc</span>
+    <span class="nav-tag">v0.1.0</span>
+    <span class="nav-tag">May 2025</span>
+  </div>
+</div>
+
+<div class="container">
+
+<h1>Architecture & Implementation Plan</h1>
+<p>Current state of PonderDB + planned features for dynamic categories and enhanced project system.</p>
+
+<div class="stats-bar">
+  <div class="stat"><div class="stat-value">6</div><div class="stat-label">Packages</div></div>
+  <div class="stat"><div class="stat-value" style="color:#10b981">5</div><div class="stat-label">MCP Tools</div></div>
+  <div class="stat"><div class="stat-value" style="color:#8b5cf6">11</div><div class="stat-label">API Endpoints</div></div>
+  <div class="stat"><div class="stat-value" style="color:#f59e0b">384</div><div class="stat-label">Embedding Dims</div></div>
+</div>
+
+<div class="toc">
+  <strong>Table of Contents</strong>
+  <ol>
+    <li><a href="#overview">System Overview</a></li>
+    <li><a href="#packages">Package Dependency Graph</a></li>
+    <li><a href="#dataflow">Data Flow Diagrams</a></li>
+    <li><a href="#schema">Database Schema</a></li>
+    <li><a href="#api">API & MCP Architecture</a></li>
+    <li><a href="#auth">Authentication & Project Scoping</a></li>
+    <li><a href="#dashboard">Dashboard Architecture</a></li>
+    <li><a href="#categories">Planned: Dynamic Categories</a></li>
+    <li><a href="#projects">Planned: Enhanced Project System</a></li>
+    <li><a href="#roadmap">Implementation Roadmap</a></li>
+  </ol>
+</div>
+
+<hr>
+
+<h2 id="overview">1. System Overview</h2>
+
+<p>PonderDB is a <strong>local-first AI agent memory server</strong> with semantic search, REST API, MCP support, and a web dashboard.</p>
+
+<div class="diagram">
+  <div class="diagram-title">High-Level Architecture</div>
+  <pre class="mermaid">
+graph TB
+    subgraph Clients
+        CLI["CLI Tool (ponder)"]
+        SDK["TypeScript SDK"]
+        MCP_STDIO["MCP stdio (Claude/Cursor)"]
+        MCP_HTTP["MCP HTTP (Remote)"]
+        DASH["Web Dashboard (React 19)"]
+    end
+
+    subgraph Server["PonderDB Server (Hono)"]
+        AUTH[Auth Middleware]
+        REST[REST API]
+        MCP_S[MCP Server]
+        STATIC[Dashboard SPA]
+    end
+
+    subgraph Storage
+        SQLITE[(SQLite)]
+        VEC[(sqlite-vec)]
+        EMBED[Embedder]
+    end
+
+    CLI --> REST
+    SDK --> REST
+    MCP_STDIO --> MCP_S
+    MCP_HTTP --> AUTH --> MCP_S
+    DASH --> AUTH --> REST
+    REST --> SQLITE
+    REST --> VEC
+    REST --> EMBED
+    MCP_S --> SQLITE
+    MCP_S --> VEC
+    MCP_S --> EMBED
+  </pre>
+</div>
+
+<h3>Tech Stack</h3>
+<table>
+  <tr><th>Layer</th><th>Technology</th><th>Details</th></tr>
+  <tr><td>Runtime</td><td><code>Node.js >= 22</code></td><td>ES modules</td></tr>
+  <tr><td>API Server</td><td><code>Hono 4.x</code></td><td>Lightweight web framework</td></tr>
+  <tr><td>Database</td><td><code>SQLite + better-sqlite3</code></td><td>Local-first, WAL mode</td></tr>
+  <tr><td>Vector DB</td><td><code>sqlite-vec 0.1.9</code></td><td>KNN cosine search</td></tr>
+  <tr><td>Embeddings</td><td><code>all-MiniLM-L6-v2</code></td><td>384-dim, ~80MB model</td></tr>
+  <tr><td>MCP</td><td><code>@modelcontextprotocol/sdk</code></td><td>stdio + Streamable HTTP</td></tr>
+  <tr><td>Dashboard</td><td><code>React 19 + Vite</code></td><td>Light theme SPA</td></tr>
+  <tr><td>CLI</td><td><code>Commander 13.1.0</code></td><td>Terminal interface</td></tr>
+</table>
+
+<hr>
+
+<h2 id="packages">2. Package Dependency Graph</h2>
+
+<div class="diagram">
+  <div class="diagram-title">Monorepo Package Dependencies</div>
+  <pre class="mermaid">
+graph LR
+    CORE["@ponderdb/core\nTypes & Interfaces"]
+    STORE["@ponderdb/sqlite-store\nSQLite + sqlite-vec"]
+    SERVER["@ponderdb/server\nHono + MCP"]
+    SDK["@ponderdb/sdk\nHTTP Client"]
+    CLI["@ponderdb/cli\nCommander"]
+    DASH["@ponderdb/dashboard\nReact 19"]
+
+    STORE --> CORE
+    SERVER --> CORE
+    SERVER --> STORE
+    SDK --> CORE
+    CLI --> SDK
+    SERVER -.serves.-> DASH
+  </pre>
+</div>
+
+<hr>
+
+<h2 id="dataflow">3. Data Flow Diagrams</h2>
+
+<div class="diagram">
+  <div class="diagram-title">Memory Write Flow</div>
+  <pre class="mermaid">
+sequenceDiagram
+    participant C as Client
+    participant A as Auth Middleware
+    participant S as Memory Service
+    participant E as Embedder
+    participant DB as SQLite
+    participant V as sqlite-vec
+
+    C->>A: POST /api/memories (Bearer pndr_xxx)
+    A->>A: Validate API key (SHA256 hash lookup)
+    A->>S: Authorized request
+    S->>S: Validate input + auto-detect category
+    S->>E: Embed key + content
+    E-->>S: 384-dim vector
+    S->>DB: INSERT INTO memories
+    S->>V: INSERT INTO vec_memories
+    S-->>C: 201 Created
+  </pre>
+</div>
+
+<div class="diagram">
+  <div class="diagram-title">Hybrid Search Flow</div>
+  <pre class="mermaid">
+sequenceDiagram
+    participant C as Client
+    participant S as Search Service
+    participant E as Embedder
+    participant V as sqlite-vec
+    participant DB as SQLite
+
+    C->>S: POST /api/memories/search
+    S->>E: Embed query
+    E-->>S: query vector
+
+    par Parallel
+        S->>V: KNN vector search
+        V-->>S: semantic results
+    and
+        S->>DB: LIKE keyword search
+        DB-->>S: keyword results
+    end
+
+    S->>S: Merge + deduplicate + sort
+    S-->>C: Ranked results
+  </pre>
+</div>
+
+<div class="diagram">
+  <div class="diagram-title">MCP Remember Tool Flow</div>
+  <pre class="mermaid">
+sequenceDiagram
+    participant AI as AI Tool (Claude/Cursor)
+    participant MCP as MCP Server
+    participant Store as SQLite Store
+    participant Embed as Embedder
+
+    AI->>MCP: remember(key, content)
+    MCP->>Store: getByKey(key)
+    alt Exists
+        MCP->>Embed: embed(key + content)
+        MCP->>Store: update(id, content, embedding)
+        MCP-->>AI: Updated key
+    else New
+        MCP->>MCP: detectCategory(content)
+        MCP->>Embed: embed(key + content)
+        MCP->>Store: create(key, content, category, embedding)
+        MCP-->>AI: Remembered key (category)
+    end
+  </pre>
+</div>
+
+<hr>
+
+<h2 id="schema">4. Database Schema</h2>
+
+<div class="diagram">
+  <div class="diagram-title">Entity Relationship Diagram</div>
+  <pre class="mermaid">
+erDiagram
+    MEMORIES {
+        text id PK
+        text key
+        text content
+        text category
+        text importance
+        text tags
+        text metadata
+        blob embedding
+        text project_id
+        text created_at
+        text updated_at
+        text accessed_at
+        int access_count
+        int version
+    }
+
+    API_KEYS {
+        text id PK
+        text name
+        text key_hash
+        text prefix
+        text created_at
+        text last_used_at
+        text expires_at
+    }
+
+    VEC_MEMORIES {
+        text memory_id PK
+        float384 embedding
+    }
+
+    MEMORIES ||--o| VEC_MEMORIES : "has vector"
+  </pre>
+</div>
+
+<hr>
+
+<h2 id="api">5. API & MCP Architecture</h2>
+
+<h3>REST API Endpoints</h3>
+<table>
+  <tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr>
+  <tr><td><code>GET</code></td><td>/health</td><td>No</td><td>Health check</td></tr>
+  <tr><td><code>GET</code></td><td>/api/memories</td><td>Yes</td><td>List memories (paginated, filterable)</td></tr>
+  <tr><td><code>POST</code></td><td>/api/memories</td><td>Yes</td><td>Create memory</td></tr>
+  <tr><td><code>GET</code></td><td>/api/memories/:key</td><td>Yes</td><td>Get memory by key</td></tr>
+  <tr><td><code>PUT</code></td><td>/api/memories/:key</td><td>Yes</td><td>Update memory</td></tr>
+  <tr><td><code>DELETE</code></td><td>/api/memories/:key</td><td>Yes</td><td>Delete memory</td></tr>
+  <tr><td><code>POST</code></td><td>/api/memories/search</td><td>Yes</td><td>Hybrid search</td></tr>
+  <tr><td><code>POST</code></td><td>/api/auth/keys</td><td>Yes</td><td>Create API key</td></tr>
+  <tr><td><code>GET</code></td><td>/api/auth/keys</td><td>Yes</td><td>List API keys</td></tr>
+  <tr><td><code>DELETE</code></td><td>/api/auth/keys/:id</td><td>Yes</td><td>Revoke API key</td></tr>
+  <tr><td><code>ALL</code></td><td>/mcp</td><td>Yes</td><td>MCP over HTTP</td></tr>
+</table>
+
+<h3>MCP Tools</h3>
+<table>
+  <tr><th>Tool</th><th>Description</th><th>Key Params</th></tr>
+  <tr><td><code>remember</code></td><td>Store/update memory (upsert)</td><td>key, content, category?, projectId?</td></tr>
+  <tr><td><code>recall</code></td><td>Get memory by key</td><td>key, projectId?</td></tr>
+  <tr><td><code>search_memories</code></td><td>Hybrid semantic + keyword search</td><td>query, category?, limit?</td></tr>
+  <tr><td><code>forget</code></td><td>Delete memory</td><td>key, projectId?</td></tr>
+  <tr><td><code>list_memories</code></td><td>List recent memories</td><td>category?, limit?</td></tr>
+</table>
+
+<div class="diagram">
+  <div class="diagram-title">MCP Transport Architecture</div>
+  <pre class="mermaid">
+graph TB
+    subgraph "stdio Transport"
+        CLAUDE[Claude CLI] --> STDIO[stdin/stdout]
+        CURSOR[Cursor] --> STDIO
+        STDIO --> MCP_SERVER[MCP Server]
+    end
+
+    subgraph "HTTP Transport"
+        REMOTE[Remote Client] --> HTTP_AUTH[Auth Middleware]
+        HTTP_AUTH --> HTTP_T[StreamableHTTPTransport]
+        HTTP_T --> MCP_SERVER2[MCP Server]
+        HTTP_T --> SESSION[(Session Map)]
+    end
+  </pre>
+</div>
+
+<hr>
+
+<h2 id="auth">6. Authentication & Project Scoping</h2>
+
+<div class="diagram">
+  <div class="diagram-title">Auth Flow</div>
+  <pre class="mermaid">
+sequenceDiagram
+    participant C as Client
+    participant MW as Auth Middleware
+    participant DB as api_keys table
+
+    C->>MW: Bearer pndr_xxxxx
+    MW->>MW: SHA256 hash token
+    MW->>DB: Lookup by key_hash
+    alt Valid & not expired
+        MW->>DB: Update last_used_at
+        MW-->>C: Request allowed
+    else Invalid
+        MW-->>C: 401 Unauthorized
+    end
+  </pre>
+</div>
+
+<div class="diagram">
+  <div class="diagram-title">Project Scoping</div>
+  <pre class="mermaid">
+graph TB
+    subgraph "User Account (API Key)"
+        subgraph "Project: frontend"
+            A1["auth/config"]
+            A2["ui/theme"]
+        end
+        subgraph "Project: backend"
+            B1["db/schema"]
+            B2["api/routes"]
+        end
+        subgraph "No Project (global)"
+            G1["general/notes"]
+        end
+    end
+  </pre>
+</div>
+
+<div class="card">
+  <h3>How Project Scoping Works</h3>
+  <ul>
+    <li><strong>API key</strong> authenticates the user</li>
+    <li><strong>projectId</strong> parameter scopes memories to a project</li>
+    <li><code>UNIQUE(key, project_id)</code> allows same key in different projects</li>
+    <li>SDK/MCP pass <code>projectId</code> with every operation</li>
+    <li>Dashboard has project selector filtering all views</li>
+  </ul>
+</div>
+
+<hr>
+
+<h2 id="dashboard">7. Dashboard Architecture</h2>
+
+<div class="diagram">
+  <div class="diagram-title">Dashboard State & Views</div>
+  <pre class="mermaid">
+graph TB
+    subgraph "App State"
+        VIEW["view: dashboard | memories | categories | keys"]
+        APIKEY["apiKey (localStorage)"]
+        PROJECT["projectId (localStorage)"]
+    end
+
+    subgraph "Views"
+        D["Dashboard - Stats + Charts"]
+        M["Memories - Table + Detail"]
+        C["Categories - Grid + Drill-down"]
+        K["API Keys - CRUD"]
+    end
+
+    subgraph "Sidebar"
+        NAV[Navigation]
+        PS[Project Selector]
+        KI[API Key Input]
+    end
+
+    VIEW --> D
+    VIEW --> M
+    VIEW --> C
+    VIEW --> K
+    PROJECT --> D
+    PROJECT --> M
+    PROJECT --> C
+  </pre>
+</div>
+
+<h3>Dashboard Features</h3>
+<table>
+  <tr><th>View</th><th>Features</th><th>Status</th></tr>
+  <tr><td>Dashboard</td><td>Animated stat cards, bar charts, importance grid, clickable mini-tables</td><td><span class="badge badge-done">Done</span></td></tr>
+  <tr><td>Memories</td><td>Paginated table, category filter, text search, detail view, delete</td><td><span class="badge badge-done">Done</span></td></tr>
+  <tr><td>Categories</td><td>Grid with counts, drill-down table, clickable rows</td><td><span class="badge badge-done">Done</span></td></tr>
+  <tr><td>API Keys</td><td>Create, copy, list, revoke</td><td><span class="badge badge-done">Done</span></td></tr>
+  <tr><td>Project Selector</td><td>Sidebar dropdown + top bar badge, filters all views</td><td><span class="badge badge-done">Done</span></td></tr>
+</table>
+
+<hr>
+
+<h2 id="categories">8. Planned: Dynamic Categories</h2>
+
+<div class="card">
+  <h3>Problem</h3>
+  <p>Categories are currently hardcoded as a fixed enum of 10 types. Users can't create custom categories, and AI can't generate new ones based on content patterns.</p>
+</div>
+
+<div class="diagram">
+  <div class="diagram-title">Planned: Dynamic Category Flow</div>
+  <pre class="mermaid">
+flowchart TD
+    A[New Memory Created] --> B{Category provided?}
+    B -->|Yes| C{Category exists?}
+    B -->|No| D[AI Auto-Detect]
+
+    C -->|Yes| E[Use existing]
+    C -->|No| F[Create new category]
+
+    D --> G{Match existing?}
+    G -->|Yes| E
+    G -->|No| H[AI suggests new category]
+    H --> K[Create AI-generated category]
+
+    E --> L[Store Memory]
+    F --> L
+    K --> L
+  </pre>
+</div>
+
+<div class="diagram">
+  <div class="diagram-title">Planned: Categories Schema</div>
+  <pre class="mermaid">
+erDiagram
+    CATEGORIES {
+        text id PK
+        text name
+        text description
+        text color
+        text project_id
+        bool is_system
+        bool is_ai_generated
+        text created_at
+    }
+
+    MEMORIES {
+        text id PK
+        text category_id FK
+    }
+
+    CATEGORIES ||--o{ MEMORIES : "has"
+  </pre>
+</div>
+
+<h3>Planned Category API</h3>
+<table>
+  <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+  <tr><td><code>GET</code></td><td>/api/categories</td><td>List all categories</td></tr>
+  <tr><td><code>POST</code></td><td>/api/categories</td><td>Create custom category</td></tr>
+  <tr><td><code>PUT</code></td><td>/api/categories/:id</td><td>Update category</td></tr>
+  <tr><td><code>DELETE</code></td><td>/api/categories/:id</td><td>Delete (reassign memories)</td></tr>
+  <tr><td><code>POST</code></td><td>/api/categories/suggest</td><td>AI suggest category for content</td></tr>
+</table>
+
+<hr>
+
+<h2 id="projects">9. Planned: Enhanced Project System</h2>
+
+<h3>Current vs Planned</h3>
+<table>
+  <tr><th>Feature</th><th>Current</th><th>Planned</th></tr>
+  <tr><td>Project creation</td><td>Implicit (any string)</td><td><span class="badge badge-planned">Explicit API + Dashboard</span></td></tr>
+  <tr><td>Project metadata</td><td>None</td><td><span class="badge badge-planned">Name, description, created_at</span></td></tr>
+  <tr><td>Project listing</td><td>Extracted from memories</td><td><span class="badge badge-planned">Dedicated API endpoint</span></td></tr>
+  <tr><td>Project categories</td><td>Global only</td><td><span class="badge badge-planned">Per-project categories</span></td></tr>
+</table>
+
+<div class="diagram">
+  <div class="diagram-title">Planned: Project + Category Schema</div>
+  <pre class="mermaid">
+erDiagram
+    PROJECTS {
+        text id PK
+        text name
+        text slug
+        text description
+        text created_at
+    }
+
+    CATEGORIES {
+        text id PK
+        text name
+        text project_id FK
+        bool is_system
+    }
+
+    MEMORIES {
+        text id PK
+        text project_id FK
+        text category_id FK
+    }
+
+    PROJECTS ||--o{ MEMORIES : "contains"
+    PROJECTS ||--o{ CATEGORIES : "has custom"
+    CATEGORIES ||--o{ MEMORIES : "classifies"
+  </pre>
+</div>
+
+<h3>SDK Usage (Planned)</h3>
+<pre><code>import { PonderClient } from '@ponderdb/sdk';
+
+const client = new PonderClient({
+  baseUrl: 'http://127.0.0.1:7437',
+  apiKey: 'pndr_xxx',
+  projectId: 'my-project',  // Scopes all operations
+});
+
+await client.remember({ key: 'auth/jwt', content: '...' });
+const mem = await client.recall('auth/jwt');</code></pre>
+
+<h3>MCP Config (Planned)</h3>
+<pre><code>{
+  "mcpServers": {
+    "ponderdb": {
+      "command": "npx",
+      "args": ["ponderdb-server", "mcp"],
+      "env": {
+        "PONDER_API_KEY": "pndr_xxx",
+        "PONDER_PROJECT_ID": "my-project"
+      }
+    }
+  }
+}</code></pre>
+
+<hr>
+
+<h2 id="roadmap">10. Implementation Roadmap</h2>
+
+<div class="phase">
+  <div class="phase-card" style="border-left: 3px solid var(--green)">
+    <h4><span class="badge badge-done">Done</span> Phase 1: Dashboard Revamp</h4>
+    <ul>
+      <li>Animated stat cards with count-up</li>
+      <li>Staggered bar chart animations</li>
+      <li>Clickable memory links (Dashboard + Categories)</li>
+      <li>Project selector + top bar</li>
+      <li>API key help text + link</li>
+      <li>Removed Search page</li>
+    </ul>
+  </div>
+
+  <div class="phase-card" style="border-left: 3px solid var(--purple)">
+    <h4><span class="badge badge-planned">Planned</span> Phase 2: Dynamic Categories</h4>
+    <ul>
+      <li>Categories DB table</li>
+      <li>Categories CRUD API</li>
+      <li>AI auto-categorization upgrade</li>
+      <li>Dashboard category management UI</li>
+      <li>MCP list_categories enhancement</li>
+    </ul>
+  </div>
+
+  <div class="phase-card" style="border-left: 3px solid var(--cyan)">
+    <h4><span class="badge badge-planned">Planned</span> Phase 3: Project System</h4>
+    <ul>
+      <li>Projects DB table + CRUD API</li>
+      <li>Dashboard project management</li>
+      <li>SDK default projectId</li>
+      <li>MCP env-based project scoping</li>
+      <li>Per-project categories</li>
+    </ul>
+  </div>
+</div>
+
+<div class="diagram">
+  <div class="diagram-title">Implementation Timeline</div>
+  <pre class="mermaid">
+gantt
+    title PonderDB Implementation Plan
+    dateFormat YYYY-MM-DD
+    section Dashboard
+    Animated dashboard + project selector    :done, 2025-05-18, 1d
+    Remove search page                       :done, 2025-05-18, 1d
+    Clickable memory links                   :done, 2025-05-18, 1d
+    section Dynamic Categories
+    Categories DB table + API                :c1, 2025-05-19, 3d
+    AI auto-categorization                   :c2, after c1, 2d
+    Dashboard category management            :c3, after c2, 2d
+    section Project System
+    Projects DB table + API                  :p1, 2025-05-19, 2d
+    Dashboard project CRUD                   :p2, after p1, 2d
+    SDK + MCP project scoping                :p3, after p2, 2d
+  </pre>
+</div>
+
+<hr>
+
+<h2>Embedding Architecture</h2>
+
+<div class="diagram">
+  <div class="diagram-title">Embedding Pipeline</div>
+  <pre class="mermaid">
+graph TB
+    subgraph "Primary: TransformerEmbeddingProvider"
+        MODEL["Xenova/all-MiniLM-L6-v2"]
+        ONNX[ONNX Runtime]
+        DIM["384 dimensions, q8"]
+    end
+
+    subgraph "Fallback: LocalEmbeddingProvider"
+        HASH["Hash-based TF-IDF"]
+        DET[Deterministic, no download]
+    end
+
+    INPUT[Text Input] --> MODEL --> ONNX --> DIM
+    MODEL -.fail.-> HASH --> DIM
+  </pre>
+</div>
+
+<h3>Search Quality</h3>
+<table>
+  <tr><th>Type</th><th>Method</th><th>Weight</th><th>Best For</th></tr>
+  <tr><td>Semantic</td><td>sqlite-vec KNN (cosine)</td><td>1.0x</td><td>Conceptual similarity</td></tr>
+  <tr><td>Keyword</td><td>SQLite LIKE</td><td>0.7x</td><td>Exact phrases</td></tr>
+  <tr><td>Hybrid</td><td>Merge + deduplicate + sort</td><td>Combined</td><td>Default (best)</td></tr>
+</table>
+
+<hr>
+
+<h2>Security Architecture</h2>
+
+<div class="diagram">
+  <div class="diagram-title">API Key Security</div>
+  <pre class="mermaid">
+graph TB
+    REQ["Client Request"] --> |"Bearer pndr_xxx"| MW[Auth Middleware]
+    MW --> HASH["SHA256(token)"]
+    HASH --> DB[(api_keys table)]
+    DB --> CHECK{Valid?}
+    CHECK --> |Yes| UPDATE["Update last_used_at"]
+    CHECK --> |No| REJECT["401 Unauthorized"]
+    UPDATE --> ALLOW["Request Proceeds"]
+  </pre>
+</div>
+
+<div class="card">
+  <h3>Security Properties</h3>
+  <ul>
+    <li>Keys never stored in plaintext (SHA256 hashed)</li>
+    <li>Format: <code>pndr_</code> prefix for identification</li>
+    <li>Auto-generated on first server start, printed once</li>
+    <li><code>last_used_at</code> tracking for audit</li>
+    <li>Optional expiration support</li>
+  </ul>
+</div>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'neutral',
+    themeVariables: {
+      primaryColor: '#eef2ff',
+      primaryTextColor: '#4f46e5',
+      primaryBorderColor: '#c7d2fe',
+      lineColor: '#94a3b8',
+      secondaryColor: '#f0fdf4',
+      tertiaryColor: '#fef3c7',
+    },
+    flowchart: { curve: 'basis', padding: 20 },
+    sequence: { actorMargin: 40, messageMargin: 40 },
+  });
+</script>
+
+</body>
+</html>

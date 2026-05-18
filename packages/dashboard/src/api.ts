@@ -52,6 +52,7 @@ export async function listMemories(
   apiKey: string,
   params?: {
     category?: string;
+    projectId?: string;
     limit?: number;
     offset?: number;
     sortBy?: string;
@@ -60,6 +61,7 @@ export async function listMemories(
 ): Promise<PaginatedResult> {
   const qs = new URLSearchParams();
   if (params?.category) qs.set("category", params.category);
+  if (params?.projectId) qs.set("projectId", params.projectId);
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.offset) qs.set("offset", String(params.offset));
   if (params?.sortBy) qs.set("sortBy", params.sortBy);
