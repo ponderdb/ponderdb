@@ -117,7 +117,29 @@ export class SqliteStore implements StorageAdapter {
       CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category);
       CREATE INDEX IF NOT EXISTS idx_memories_project_id ON memories(project_id);
       CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at);
+    `);
 
+    // Migration: add token_count column if missing (existing DBs)
+    const cols = this.db.prepare("PRAGMA table_info(memories)").all() as { name: string }[];
+    if (!cols.some((c) => c.name === "token_count")) {
+      this.db.exec("ALTER TABLE memories ADD COLUMN token_count INTEGER NOT NULL DEFAULT 0");
+    }
+
+    // Backfill token_count for any rows that are 0
+    const zeroTokenRows = this.db.prepare(
+      "SELECT id, content FROM memories WHERE token_count = 0"
+    ).all() as { id: string; content: string }[];
+    if (zeroTokenRows.length > 0) {
+      const update = this.db.prepare("UPDATE memories SET token_count = ? WHERE id = ?");
+      const tx = this.db.transaction(() => {
+        for (const row of zeroTokenRows) {
+          update.run(estimateTokens(row.content), row.id);
+        }
+      });
+      tx();
+    }
+
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS projects (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
