@@ -24,6 +24,10 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12"
   },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -16,6 +16,10 @@
     "dev": "tsc --build --watch",
     "clean": "rm -rf dist *.tsbuildinfo"
   },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
