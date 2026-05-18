@@ -14,6 +14,7 @@ export function Projects({ apiKey, currentProjectId, onProjectsChanged }: Projec
   const [error, setError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<ProjectInfo | null>(null);
+  const [deleting, setDeleting] = useState<ProjectInfo | null>(null);
 
   const load = useCallback(() => {
     if (!apiKey) { setLoading(false); return; }
@@ -36,44 +37,16 @@ export function Projects({ apiKey, currentProjectId, onProjectsChanged }: Projec
     return { allowed: true };
   };
 
-  const handleDelete = async (project: ProjectInfo) => {
-    const check = canDelete(project);
-    if (!check.allowed) {
-      setError(check.reason!);
-      return;
-    }
-
-    const count = project.memoryCount || 0;
-    const catCount = project.categoryCount || 0;
-
-    const warning = [
-      `⚠️ DELETE PROJECT: "${project.name}"`,
-      "",
-      "This action is PERMANENT and CANNOT be undone.",
-      "",
-      "The following will be permanently deleted:",
-      `  • ${count} ${count === 1 ? "memory" : "memories"} and all their embeddings`,
-      `  • ${catCount} custom ${catCount === 1 ? "category" : "categories"}`,
-      `  • All project-scoped data`,
-      "",
-      `Type "${project.slug}" to confirm deletion:`,
-    ].join("\n");
-
-    const confirmation = prompt(warning);
-    if (confirmation !== project.slug) {
-      if (confirmation !== null) {
-        setError(`Deletion cancelled. You typed "${confirmation}" but the project slug is "${project.slug}".`);
-      }
-      return;
-    }
-
+  const handleDeleteConfirmed = async (project: ProjectInfo) => {
     try {
       await deleteProject(apiKey, project.id);
       setError("");
+      setDeleting(null);
       load();
       onProjectsChanged();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Delete failed");
+      setDeleting(null);
     }
   };
 
@@ -102,6 +75,14 @@ export function Projects({ apiKey, currentProjectId, onProjectsChanged }: Projec
           project={editing}
           onSaved={() => { setShowCreate(false); setEditing(null); load(); onProjectsChanged(); }}
           onCancel={() => { setShowCreate(false); setEditing(null); }}
+        />
+      )}
+
+      {deleting && (
+        <DeleteConfirmDialog
+          project={deleting}
+          onConfirm={() => handleDeleteConfirmed(deleting)}
+          onCancel={() => setDeleting(null)}
         />
       )}
 
@@ -141,7 +122,10 @@ export function Projects({ apiKey, currentProjectId, onProjectsChanged }: Projec
                   className="btn btn-danger btn-sm"
                   disabled={!deleteCheck.allowed}
                   title={deleteCheck.reason || "Delete project"}
-                  onClick={() => handleDelete(p)}
+                  onClick={() => {
+                    if (!deleteCheck.allowed) { setError(deleteCheck.reason!); return; }
+                    setDeleting(p);
+                  }}
                 >
                   Delete
                 </button>
@@ -156,6 +140,90 @@ export function Projects({ apiKey, currentProjectId, onProjectsChanged }: Projec
           <strong>Usage:</strong> Set <code>PONDER_PROJECT_ID=your-slug</code> in your MCP config or pass <code>projectId</code> to the SDK. A project ID is required for all operations.
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Delete Confirmation Dialog ──
+
+function DeleteConfirmDialog({
+  project,
+  onConfirm,
+  onCancel,
+}: {
+  project: ProjectInfo;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const count = project.memoryCount || 0;
+  const catCount = project.categoryCount || 0;
+  const isMatch = confirmText === project.slug;
+
+  return (
+    <div className="dialog-overlay" onClick={onCancel}>
+      <div className="dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="dialog-icon-danger">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+        </div>
+        <h3 className="dialog-title">Delete Project</h3>
+        <p className="dialog-text">
+          This action is <strong>permanent</strong> and <strong>cannot be undone</strong>.
+        </p>
+
+        <div className="dialog-details">
+          <div className="dialog-detail-row">
+            <span>Project</span>
+            <strong>{project.name}</strong>
+          </div>
+          <div className="dialog-detail-row">
+            <span>Memories to delete</span>
+            <strong className="dialog-danger-text">{count}</strong>
+          </div>
+          <div className="dialog-detail-row">
+            <span>Categories to delete</span>
+            <strong className="dialog-danger-text">{catCount}</strong>
+          </div>
+          <div className="dialog-detail-row">
+            <span>Embeddings to delete</span>
+            <strong className="dialog-danger-text">{count}</strong>
+          </div>
+        </div>
+
+        <div className="dialog-confirm-input">
+          <label>
+            Type <code>{project.slug}</code> to confirm
+          </label>
+          <input
+            type="text"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder={project.slug}
+            autoFocus
+          />
+        </div>
+
+        <div className="dialog-actions">
+          <button className="btn btn-secondary" onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            className="btn btn-danger"
+            disabled={!isMatch || deleting}
+            onClick={async () => {
+              setDeleting(true);
+              await onConfirm();
+            }}
+          >
+            {deleting ? "Deleting..." : "Delete permanently"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
