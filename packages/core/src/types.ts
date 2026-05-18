@@ -22,6 +22,7 @@ export interface Memory {
   updatedAt: Date;
   accessedAt: Date;
   accessCount: number;
+  tokenCount: number;
   version: number;
 }
 
@@ -94,6 +95,29 @@ export interface ApiKey {
   createdAt: Date;
   lastUsedAt?: Date;
   expiresAt?: Date;
+}
+
+/** Project definition */
+export interface Project {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Input for creating a project */
+export interface CreateProjectInput {
+  name: string;
+  slug?: string;
+  description?: string;
+}
+
+/** Input for updating a project */
+export interface UpdateProjectInput {
+  name?: string;
+  description?: string;
 }
 
 /** Category definition */

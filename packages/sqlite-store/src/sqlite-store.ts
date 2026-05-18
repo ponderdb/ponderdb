@@ -15,11 +15,16 @@ import type {
   Category,
   CreateCategoryInput,
   UpdateCategoryInput,
+  Project,
+  CreateProjectInput,
+  UpdateProjectInput,
 } from "@ponderdb/core";
 import {
   generateId,
   generateApiKey,
   hashApiKey,
+  slugify,
+  estimateTokens,
   MemoryNotFoundError,
   DuplicateKeyError,
   SYSTEM_CATEGORIES,
@@ -39,6 +44,7 @@ interface SqliteRow {
   updated_at: string;
   accessed_at: string;
   access_count: number;
+  token_count: number;
   version: number;
 }
 
@@ -52,6 +58,15 @@ interface CategoryRow {
   is_system: number;
   is_ai_generated: number;
   created_at: string;
+}
+
+interface ProjectRow {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
 }
 
 function embeddingToBlob(embedding: number[]): Buffer {
@@ -93,6 +108,7 @@ export class SqliteStore implements StorageAdapter {
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
         accessed_at TEXT NOT NULL DEFAULT (datetime('now')),
         access_count INTEGER NOT NULL DEFAULT 0,
+        token_count INTEGER NOT NULL DEFAULT 0,
         version INTEGER NOT NULL DEFAULT 1,
         UNIQUE(key, project_id)
       );
@@ -101,6 +117,15 @@ export class SqliteStore implements StorageAdapter {
       CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category);
       CREATE INDEX IF NOT EXISTS idx_memories_project_id ON memories(project_id);
       CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at);
+
+      CREATE TABLE IF NOT EXISTS projects (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        slug TEXT NOT NULL UNIQUE,
+        description TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
 
       CREATE TABLE IF NOT EXISTS api_keys (
         id TEXT PRIMARY KEY,
@@ -162,10 +187,11 @@ export class SqliteStore implements StorageAdapter {
     const id = generateId();
     const now = new Date().toISOString();
     const embeddingBlob = input.embedding ? embeddingToBlob(input.embedding) : null;
+    const tokenCount = estimateTokens(input.content);
 
     const insertMemory = this.db.prepare(`
-      INSERT INTO memories (id, key, content, category, importance, tags, metadata, embedding, project_id, created_at, updated_at, accessed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO memories (id, key, content, category, importance, tags, metadata, embedding, project_id, token_count, created_at, updated_at, accessed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertVec = this.db.prepare(`
@@ -177,7 +203,7 @@ export class SqliteStore implements StorageAdapter {
         id, input.key, input.content,
         input.category ?? "custom", input.importance ?? "medium",
         JSON.stringify(input.tags ?? []), JSON.stringify(input.metadata ?? {}),
-        embeddingBlob, input.projectId ?? null,
+        embeddingBlob, input.projectId ?? null, tokenCount,
         now, now, now,
       );
       if (embeddingBlob) {
@@ -214,6 +240,8 @@ export class SqliteStore implements StorageAdapter {
     if (input.content !== undefined) {
       sets.push("content = ?");
       params.push(input.content);
+      sets.push("token_count = ?");
+      params.push(estimateTokens(input.content));
     }
     if (input.category !== undefined) {
       sets.push("category = ?");
@@ -549,6 +577,72 @@ export class SqliteStore implements StorageAdapter {
     };
   }
 
+  // ── Projects ──
+
+  async listProjects(): Promise<Project[]> {
+    const rows = this.db.prepare("SELECT * FROM projects ORDER BY name ASC").all() as ProjectRow[];
+    return rows.map((r) => this.rowToProject(r));
+  }
+
+  async getProjectBySlug(slug: string): Promise<Project | null> {
+    const row = this.db.prepare("SELECT * FROM projects WHERE slug = ?").get(slug) as ProjectRow | undefined;
+    return row ? this.rowToProject(row) : null;
+  }
+
+  async createProject(input: CreateProjectInput): Promise<Project> {
+    const id = generateId();
+    const now = new Date().toISOString();
+    const slug = input.slug || slugify(input.name);
+    this.db.prepare(`
+      INSERT INTO projects (id, name, slug, description, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, input.name, slug, input.description ?? "", now, now);
+    return this.rowToProject(this.db.prepare("SELECT * FROM projects WHERE id = ?").get(id) as ProjectRow);
+  }
+
+  async updateProject(id: string, input: UpdateProjectInput): Promise<Project> {
+    const sets: string[] = ["updated_at = datetime('now')"];
+    const params: unknown[] = [];
+    if (input.name !== undefined) { sets.push("name = ?"); params.push(input.name); }
+    if (input.description !== undefined) { sets.push("description = ?"); params.push(input.description); }
+    params.push(id);
+    this.db.prepare(`UPDATE projects SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+    return this.rowToProject(this.db.prepare("SELECT * FROM projects WHERE id = ?").get(id) as ProjectRow);
+  }
+
+  async deleteProject(id: string): Promise<boolean> {
+    const project = this.db.prepare("SELECT slug FROM projects WHERE id = ?").get(id) as { slug: string } | undefined;
+    if (!project) return false;
+
+    const tx = this.db.transaction(() => {
+      // Delete vectors for project memories
+      this.db.prepare(`
+        DELETE FROM vec_memories WHERE memory_id IN (
+          SELECT id FROM memories WHERE project_id = ?
+        )
+      `).run(project.slug);
+      // Delete memories
+      this.db.prepare("DELETE FROM memories WHERE project_id = ?").run(project.slug);
+      // Delete project-scoped categories
+      this.db.prepare("DELETE FROM categories WHERE project_id = ?").run(project.slug);
+      // Delete project
+      this.db.prepare("DELETE FROM projects WHERE id = ?").run(id);
+    });
+    tx();
+    return true;
+  }
+
+  private rowToProject(row: ProjectRow): Project {
+    return {
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      description: row.description,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+    };
+  }
+
   private rowToMemory(row: SqliteRow): Memory {
     return {
       id: row.id,
@@ -563,6 +657,7 @@ export class SqliteStore implements StorageAdapter {
       updatedAt: new Date(row.updated_at),
       accessedAt: new Date(row.accessed_at),
       accessCount: row.access_count,
+      tokenCount: row.token_count,
       version: row.version,
     };
   }

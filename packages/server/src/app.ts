@@ -10,6 +10,7 @@ import { PonderError } from "@ponderdb/core";
 import { memoriesRouter } from "./routes/memories.js";
 import { authRouter } from "./routes/auth.js";
 import { categoriesRouter } from "./routes/categories.js";
+import { projectsRouter } from "./routes/projects.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { mcpHttpRouter } from "./mcp-http.js";
 
@@ -40,6 +41,7 @@ export function createApp(deps: AppDeps) {
   app.route("/api/memories", memoriesRouter(deps));
   app.route("/api/auth", authRouter(deps));
   app.route("/api/categories", categoriesRouter(deps));
+  app.route("/api/projects", projectsRouter(deps));
 
   // Dashboard static files
   const __dirname = dirname(fileURLToPath(import.meta.url));

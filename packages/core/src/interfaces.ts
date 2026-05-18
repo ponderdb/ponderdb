@@ -11,6 +11,9 @@ import type {
   Category,
   CreateCategoryInput,
   UpdateCategoryInput,
+  Project,
+  CreateProjectInput,
+  UpdateProjectInput,
 } from "./types.js";
 
 /** Storage backend interface — implemented by sqlite-store, pg-store, etc. */
@@ -82,6 +85,23 @@ export interface StorageAdapter {
 
   /** Delete a category */
   deleteCategory(id: string): Promise<boolean>;
+
+  // ── Projects ──
+
+  /** List all projects */
+  listProjects(): Promise<Project[]>;
+
+  /** Get project by slug */
+  getProjectBySlug(slug: string): Promise<Project | null>;
+
+  /** Create a new project */
+  createProject(input: CreateProjectInput): Promise<Project>;
+
+  /** Update a project */
+  updateProject(id: string, input: UpdateProjectInput): Promise<Project>;
+
+  /** Delete a project and all its memories */
+  deleteProject(id: string): Promise<boolean>;
 }
 
 /** Embedding provider interface */
