@@ -16,7 +16,8 @@
     "format": "prettier --write \"packages/*/src/**/*.{ts,tsx,css}\"",
     "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx,css}\"",
     "clean": "rm -rf packages/*/dist packages/*/*.tsbuildinfo",
-    "setup": "npm install && npm run build"
+    "setup": "npm install && npm run build",
+    "publish:all": "npm run clean && npm run build && npm publish --workspace=@ponderdb/core && npm publish --workspace=@ponderdb/sqlite-store && npm publish --workspace=@ponderdb/sdk && npm publish --workspace=@ponderdb/server && npm publish --workspace=@ponderdb/cli"
   },
   "engines": {
     "node": ">=22.0.0"

@@ -26,6 +26,10 @@
   "devDependencies": {
     "tsx": "^4.19.4"
   },
+  "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
