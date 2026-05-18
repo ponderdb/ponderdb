@@ -17,21 +17,22 @@ const CATEGORY_META: Record<string, { color: string; bg: string; description: st
 
 interface CategoriesProps {
   apiKey: string;
+  projectId?: string;
   onSelectMemory?: (memory: Memory) => void;
 }
 
-export function Categories({ apiKey, onSelectMemory }: CategoriesProps) {
+export function Categories({ apiKey, projectId, onSelectMemory }: CategoriesProps) {
   const [allMemories, setAllMemories] = useState<Memory[]>([]);
   const [selectedCat, setSelectedCat] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!apiKey) { setLoading(false); return; }
-    listMemories(apiKey, { limit: 500, sortBy: "updatedAt", sortOrder: "desc" })
+    listMemories(apiKey, { limit: 500, sortBy: "updatedAt", sortOrder: "desc", projectId: projectId || undefined })
       .then((r) => setAllMemories(r.items))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [apiKey]);
+  }, [apiKey, projectId]);
 
   if (!apiKey) return <div className="empty"><p>Enter your API key in the sidebar</p></div>;
   if (loading) return <div className="loading">Loading...</div>;

@@ -124,10 +124,11 @@ function MiniTable({
 
 interface DashboardProps {
   apiKey: string;
+  projectId?: string;
   onSelectMemory?: (memory: Memory) => void;
 }
 
-export function Dashboard({ apiKey, onSelectMemory }: DashboardProps) {
+export function Dashboard({ apiKey, projectId, onSelectMemory }: DashboardProps) {
   const [allMemories, setAllMemories] = useState<Memory[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -135,7 +136,7 @@ export function Dashboard({ apiKey, onSelectMemory }: DashboardProps) {
 
   useEffect(() => {
     if (!apiKey) { setLoading(false); return; }
-    listMemories(apiKey, { limit: 500, sortBy: "updatedAt", sortOrder: "desc" })
+    listMemories(apiKey, { limit: 500, sortBy: "updatedAt", sortOrder: "desc", projectId: projectId || undefined })
       .then((r) => {
         setAllMemories(r.items);
         setTotal(r.total);
@@ -145,7 +146,7 @@ export function Dashboard({ apiKey, onSelectMemory }: DashboardProps) {
         setLoading(false);
         requestAnimationFrame(() => setVisible(true));
       });
-  }, [apiKey]);
+  }, [apiKey, projectId]);
 
   if (!apiKey) return <div className="empty"><p>Enter your API key in the sidebar</p></div>;
   if (loading) return <div className="loading">Loading...</div>;

@@ -20,11 +20,12 @@ const PAGE_SIZE = 20;
 
 interface MemoryListProps {
   apiKey: string;
+  projectId?: string;
   initialMemory?: Memory | null;
   onMemoryConsumed?: () => void;
 }
 
-export function MemoryList({ apiKey, initialMemory, onMemoryConsumed }: MemoryListProps) {
+export function MemoryList({ apiKey, projectId, initialMemory, onMemoryConsumed }: MemoryListProps) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -45,6 +46,7 @@ export function MemoryList({ apiKey, initialMemory, onMemoryConsumed }: MemoryLi
     setError("");
     listMemories(apiKey, {
       category: category || undefined,
+      projectId: projectId || undefined,
       limit: PAGE_SIZE,
       offset,
       sortBy: "updatedAt",
@@ -55,7 +57,7 @@ export function MemoryList({ apiKey, initialMemory, onMemoryConsumed }: MemoryLi
         setTotal(r.total);
       })
       .catch((e) => setError(e.message));
-  }, [apiKey, category, offset]);
+  }, [apiKey, projectId, category, offset]);
 
   useEffect(() => {
     load();
