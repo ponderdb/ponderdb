@@ -43,6 +43,11 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   return denom === 0 ? 0 : dot / denom;
 }
 
+/** Generate URL-friendly slug from string */
+export function slugify(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
 /** Auto-detect memory category from content */
 export function detectCategory(content: string, key: string): string {
   const text = `${key} ${content}`.toLowerCase();

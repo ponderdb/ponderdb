@@ -21,14 +21,17 @@ export class PonderApiError extends Error {
 export interface PonderClientConfig {
   baseUrl: string;
   apiKey?: string;
+  projectId?: string;
 }
 
 export class PonderClient {
   private baseUrl: string;
   private headers: Record<string, string>;
+  private defaultProjectId?: string;
 
   constructor(config: PonderClientConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, "");
+    this.defaultProjectId = config.projectId;
     this.headers = {
       "Content-Type": "application/json",
     };
@@ -38,14 +41,16 @@ export class PonderClient {
   }
 
   async remember(input: CreateMemoryInput): Promise<Memory> {
+    const body = { ...input, projectId: input.projectId ?? this.defaultProjectId };
     return this.fetch<Memory>("/api/memories", {
       method: "POST",
-      body: JSON.stringify(input),
+      body: JSON.stringify(body),
     });
   }
 
   async recall(key: string, projectId?: string): Promise<Memory | null> {
-    const params = projectId ? `?projectId=${encodeURIComponent(projectId)}` : "";
+    const pid = projectId ?? this.defaultProjectId;
+    const params = pid ? `?projectId=${encodeURIComponent(pid)}` : "";
     try {
       return await this.fetch<Memory>(`/api/memories/${encodeURIComponent(key)}${params}`);
     } catch (err: unknown) {
@@ -75,7 +80,8 @@ export class PonderClient {
   }
 
   async forget(key: string, projectId?: string): Promise<void> {
-    const params = projectId ? `?projectId=${encodeURIComponent(projectId)}` : "";
+    const pid = projectId ?? this.defaultProjectId;
+    const params = pid ? `?projectId=${encodeURIComponent(pid)}` : "";
     await this.fetch<{ deleted: boolean }>(`/api/memories/${encodeURIComponent(key)}${params}`, {
       method: "DELETE",
     });

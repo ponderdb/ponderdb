@@ -4,6 +4,8 @@ import type { StorageAdapter, EmbeddingProvider, MemoryCategory } from "@ponderd
 import { detectCategory } from "@ponderdb/core";
 
 export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvider) {
+  const defaultProjectId = process.env.PONDER_PROJECT_ID || undefined;
+
   const server = new McpServer({
     name: "ponderdb",
     version: "0.1.0",
@@ -21,7 +23,8 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
       tags: z.array(z.string()).optional(),
       projectId: z.string().optional(),
     },
-    async ({ key, content, category, importance, tags, projectId }) => {
+    async ({ key, content, category, importance, tags, projectId: pid }) => {
+      const projectId = pid ?? defaultProjectId;
       // Use provided category, or check custom categories, or auto-detect
       let cat = category;
       if (!cat) {
@@ -61,7 +64,8 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
       key: z.string().describe("The memory key to retrieve"),
       projectId: z.string().optional(),
     },
-    async ({ key, projectId }) => {
+    async ({ key, projectId: pid }) => {
+      const projectId = pid ?? defaultProjectId;
       const memory = await store.getByKey(key, projectId);
       if (!memory) {
         return {
@@ -89,7 +93,8 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
       limit: z.number().optional().default(5),
       projectId: z.string().optional(),
     },
-    async ({ query, category, limit, projectId }) => {
+    async ({ query, category, limit, projectId: pid }) => {
+      const projectId = pid ?? defaultProjectId;
       const embedding = await embedder.embed(query);
 
       const [vectorResults, keywordResults] = await Promise.all([
@@ -127,7 +132,8 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
       key: z.string().describe("The memory key to delete"),
       projectId: z.string().optional(),
     },
-    async ({ key, projectId }) => {
+    async ({ key, projectId: pid }) => {
+      const projectId = pid ?? defaultProjectId;
       const memory = await store.getByKey(key, projectId);
       if (!memory) {
         return { content: [{ type: "text" as const, text: `No memory found for key: ${key}` }] };
@@ -146,7 +152,8 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
       limit: z.number().optional().default(10),
       projectId: z.string().optional(),
     },
-    async ({ category, limit, projectId }) => {
+    async ({ category, limit, projectId: pid }) => {
+      const projectId = pid ?? defaultProjectId;
       const result = await store.list({
         category: category as MemoryCategory | undefined,
         projectId,
@@ -174,7 +181,8 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
     {
       projectId: z.string().optional(),
     },
-    async ({ projectId }) => {
+    async ({ projectId: pid }) => {
+      const projectId = pid ?? defaultProjectId;
       const categories = await store.listCategories(projectId);
 
       if (categories.length === 0) {

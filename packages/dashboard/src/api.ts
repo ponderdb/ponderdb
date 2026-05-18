@@ -220,4 +220,63 @@ export async function suggestCategory(
   return res.json();
 }
 
-export type { Memory, PaginatedResult, SearchResult, ApiKeyInfo, CategoryInfo };
+// ── Projects ──
+
+interface ProjectInfo {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+  memoryCount?: number;
+  categoryCount?: number;
+}
+
+export async function listProjects(
+  apiKey: string,
+): Promise<{ projects: ProjectInfo[] }> {
+  const res = await fetch(`${BASE}/api/projects`, {
+    headers: headers(apiKey),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export async function createProject(
+  apiKey: string,
+  input: { name: string; slug?: string; description?: string },
+): Promise<ProjectInfo> {
+  const res = await fetch(`${BASE}/api/projects`, {
+    method: "POST",
+    headers: headers(apiKey),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export async function updateProject(
+  apiKey: string,
+  id: string,
+  input: { name?: string; description?: string },
+): Promise<ProjectInfo> {
+  const res = await fetch(`${BASE}/api/projects/${id}`, {
+    method: "PUT",
+    headers: headers(apiKey),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export async function deleteProject(apiKey: string, id: string) {
+  const res = await fetch(`${BASE}/api/projects/${id}`, {
+    method: "DELETE",
+    headers: headers(apiKey),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export type { Memory, PaginatedResult, SearchResult, ApiKeyInfo, CategoryInfo, ProjectInfo };
