@@ -4,10 +4,11 @@ import { Dashboard } from "./components/Dashboard";
 import { MemoryList } from "./components/MemoryList";
 import { Categories } from "./components/Categories";
 import { ApiKeys } from "./components/ApiKeys";
-import { fetchHealth, listMemories } from "./api";
-import type { Memory } from "./api";
+import { Projects } from "./components/Projects";
+import { fetchHealth, listProjects } from "./api";
+import type { Memory, ProjectInfo } from "./api";
 
-type View = "dashboard" | "memories" | "categories" | "keys";
+type View = "dashboard" | "memories" | "categories" | "keys" | "projects";
 
 export function App() {
   const [apiKey, setApiKey] = useState(
@@ -16,7 +17,7 @@ export function App() {
   const [view, setView] = useState<View>("dashboard");
   const [healthy, setHealthy] = useState<boolean | null>(null);
   const [selectedMemory, setSelectedMemory] = useState<Memory | null>(null);
-  const [projects, setProjects] = useState<string[]>([]);
+  const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [projectId, setProjectId] = useState<string>(
     () => localStorage.getItem("ponderdb_project") || "",
   );
@@ -35,19 +36,14 @@ export function App() {
     localStorage.setItem("ponderdb_project", projectId);
   }, [projectId]);
 
-  // Fetch distinct projects when apiKey changes
-  useEffect(() => {
+  const loadProjects = useCallback(() => {
     if (!apiKey) { setProjects([]); return; }
-    listMemories(apiKey, { limit: 500, sortBy: "updatedAt", sortOrder: "desc" })
-      .then((r) => {
-        const ids = new Set<string>();
-        for (const m of r.items) {
-          if (m.projectId) ids.add(m.projectId);
-        }
-        setProjects([...ids].sort());
-      })
+    listProjects(apiKey)
+      .then((r) => setProjects(r.projects))
       .catch(() => setProjects([]));
   }, [apiKey]);
+
+  useEffect(() => { loadProjects(); }, [loadProjects]);
 
   const handleSelectMemory = useCallback((memory: Memory) => {
     setSelectedMemory(memory);
@@ -90,6 +86,7 @@ export function App() {
       )}
       {view === "categories" && <Categories apiKey={apiKey} projectId={projectId} onSelectMemory={handleSelectMemory} />}
       {view === "keys" && <ApiKeys apiKey={apiKey} />}
+      {view === "projects" && <Projects apiKey={apiKey} onProjectsChanged={loadProjects} />}
     </Layout>
   );
 }
