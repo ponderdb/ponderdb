@@ -12,6 +12,9 @@ import type {
   PaginatedResult,
   SearchResult,
   ApiKey,
+  Category,
+  CreateCategoryInput,
+  UpdateCategoryInput,
 } from "@ponderdb/core";
 import {
   generateId,
@@ -19,6 +22,7 @@ import {
   hashApiKey,
   MemoryNotFoundError,
   DuplicateKeyError,
+  SYSTEM_CATEGORIES,
 } from "@ponderdb/core";
 
 interface SqliteRow {
@@ -36,6 +40,18 @@ interface SqliteRow {
   accessed_at: string;
   access_count: number;
   version: number;
+}
+
+interface CategoryRow {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  icon: string | null;
+  project_id: string | null;
+  is_system: number;
+  is_ai_generated: number;
+  created_at: string;
 }
 
 function embeddingToBlob(embedding: number[]): Buffer {
@@ -95,7 +111,33 @@ export class SqliteStore implements StorageAdapter {
         last_used_at TEXT,
         expires_at TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        color TEXT NOT NULL DEFAULT '#64748b',
+        icon TEXT,
+        project_id TEXT,
+        is_system INTEGER NOT NULL DEFAULT 0,
+        is_ai_generated INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(name, project_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_categories_project ON categories(project_id);
     `);
+
+    // Seed system categories if none exist
+    const catCount = (this.db.prepare("SELECT COUNT(*) as count FROM categories WHERE is_system = 1").get() as { count: number }).count;
+    if (catCount === 0) {
+      const insert = this.db.prepare("INSERT OR IGNORE INTO categories (id, name, description, color, is_system) VALUES (?, ?, ?, ?, 1)");
+      const tx = this.db.transaction(() => {
+        for (const cat of SYSTEM_CATEGORIES) {
+          insert.run(generateId(), cat.name, cat.description, cat.color);
+        }
+      });
+      tx();
+    }
 
     // Create sqlite-vec virtual table for vector search
     this.db.exec(`
@@ -434,6 +476,77 @@ export class SqliteStore implements StorageAdapter {
 
   async countApiKeys(): Promise<number> {
     return (this.db.prepare("SELECT COUNT(*) as count FROM api_keys").get() as { count: number }).count;
+  }
+
+  // ── Categories ──
+
+  async listCategories(projectId?: string): Promise<Category[]> {
+    const rows = this.db.prepare(
+      "SELECT * FROM categories WHERE project_id IS ? OR is_system = 1 ORDER BY is_system DESC, name ASC"
+    ).all(projectId ?? null) as CategoryRow[];
+    return rows.map((r) => this.rowToCategory(r));
+  }
+
+  async getCategoryByName(name: string, projectId?: string): Promise<Category | null> {
+    const row = this.db.prepare(
+      "SELECT * FROM categories WHERE name = ? AND (project_id IS ? OR is_system = 1) ORDER BY project_id IS NOT NULL DESC LIMIT 1"
+    ).get(name, projectId ?? null) as CategoryRow | undefined;
+    return row ? this.rowToCategory(row) : null;
+  }
+
+  async createCategory(input: CreateCategoryInput & { isSystem?: boolean; isAiGenerated?: boolean }): Promise<Category> {
+    const id = generateId();
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      INSERT INTO categories (id, name, description, color, icon, project_id, is_system, is_ai_generated, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id, input.name, input.description ?? "", input.color ?? "#64748b",
+      input.icon ?? null, input.projectId ?? null,
+      input.isSystem ? 1 : 0, input.isAiGenerated ? 1 : 0, now,
+    );
+    return this.rowToCategory(
+      this.db.prepare("SELECT * FROM categories WHERE id = ?").get(id) as CategoryRow,
+    );
+  }
+
+  async updateCategory(id: string, input: UpdateCategoryInput): Promise<Category> {
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    if (input.name !== undefined) { sets.push("name = ?"); params.push(input.name); }
+    if (input.description !== undefined) { sets.push("description = ?"); params.push(input.description); }
+    if (input.color !== undefined) { sets.push("color = ?"); params.push(input.color); }
+    if (input.icon !== undefined) { sets.push("icon = ?"); params.push(input.icon); }
+    if (sets.length === 0) {
+      return this.rowToCategory(this.db.prepare("SELECT * FROM categories WHERE id = ?").get(id) as CategoryRow);
+    }
+    params.push(id);
+    this.db.prepare(`UPDATE categories SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+    return this.rowToCategory(this.db.prepare("SELECT * FROM categories WHERE id = ?").get(id) as CategoryRow);
+  }
+
+  async deleteCategory(id: string): Promise<boolean> {
+    // Reassign memories to "custom" before deleting
+    const cat = this.db.prepare("SELECT name FROM categories WHERE id = ?").get(id) as { name: string } | undefined;
+    if (cat) {
+      this.db.prepare("UPDATE memories SET category = 'custom' WHERE category = ?").run(cat.name);
+    }
+    const result = this.db.prepare("DELETE FROM categories WHERE id = ? AND is_system = 0").run(id);
+    return result.changes > 0;
+  }
+
+  private rowToCategory(row: CategoryRow): Category {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      color: row.color,
+      icon: row.icon ?? undefined,
+      projectId: row.project_id ?? undefined,
+      isSystem: row.is_system === 1,
+      isAiGenerated: row.is_ai_generated === 1,
+      createdAt: new Date(row.created_at),
+    };
   }
 
   private rowToMemory(row: SqliteRow): Memory {

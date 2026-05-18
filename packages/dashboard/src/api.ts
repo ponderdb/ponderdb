@@ -141,4 +141,83 @@ export async function revokeApiKey(apiKey: string, id: string) {
   return res.json();
 }
 
-export type { Memory, PaginatedResult, SearchResult, ApiKeyInfo };
+// ── Categories ──
+
+interface CategoryInfo {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  icon?: string;
+  projectId?: string;
+  isSystem: boolean;
+  isAiGenerated: boolean;
+  createdAt: string;
+  count: number;
+}
+
+export async function listCategories(
+  apiKey: string,
+  projectId?: string,
+): Promise<{ categories: CategoryInfo[] }> {
+  const qs = new URLSearchParams();
+  if (projectId) qs.set("projectId", projectId);
+  const res = await fetch(`${BASE}/api/categories?${qs}`, {
+    headers: headers(apiKey),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export async function createCategory(
+  apiKey: string,
+  input: { name: string; description?: string; color?: string; projectId?: string },
+): Promise<CategoryInfo> {
+  const res = await fetch(`${BASE}/api/categories`, {
+    method: "POST",
+    headers: headers(apiKey),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export async function updateCategory(
+  apiKey: string,
+  id: string,
+  input: { name?: string; description?: string; color?: string },
+): Promise<CategoryInfo> {
+  const res = await fetch(`${BASE}/api/categories/${id}`, {
+    method: "PUT",
+    headers: headers(apiKey),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export async function deleteCategory(apiKey: string, id: string) {
+  const res = await fetch(`${BASE}/api/categories/${id}`, {
+    method: "DELETE",
+    headers: headers(apiKey),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export async function suggestCategory(
+  apiKey: string,
+  content: string,
+  key?: string,
+  projectId?: string,
+): Promise<{ category: string; confidence: number; source: string }> {
+  const res = await fetch(`${BASE}/api/categories/suggest`, {
+    method: "POST",
+    headers: headers(apiKey),
+    body: JSON.stringify({ content, key, projectId }),
+  });
+  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+export type { Memory, PaginatedResult, SearchResult, ApiKeyInfo, CategoryInfo };
