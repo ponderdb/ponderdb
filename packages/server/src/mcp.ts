@@ -16,13 +16,26 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
     {
       key: z.string().describe("Unique key like 'auth/jwt-config' or 'bug/login-race-condition'"),
       content: z.string().describe("The memory content to store"),
-      category: z.enum(["architecture", "bug", "pattern", "config", "decision", "snippet", "debug", "workflow", "dependency", "custom"]).optional().describe("Memory category"),
+      category: z.string().optional().describe("Memory category (system or custom)"),
       importance: z.enum(["low", "medium", "high", "critical"]).optional(),
       tags: z.array(z.string()).optional(),
       projectId: z.string().optional(),
     },
     async ({ key, content, category, importance, tags, projectId }) => {
-      const cat = category ?? detectCategory(content, key);
+      // Use provided category, or check custom categories, or auto-detect
+      let cat = category;
+      if (!cat) {
+        // Check if any custom category matches
+        const categories = await store.listCategories(projectId);
+        const text = `${key} ${content}`.toLowerCase();
+        for (const c of categories) {
+          if (!c.isSystem && text.includes(c.name.toLowerCase())) {
+            cat = c.name;
+            break;
+          }
+        }
+        if (!cat) cat = detectCategory(content, key);
+      }
       const embedding = await embedder.embed(`${key} ${content}`);
 
       // Upsert: update if exists, create if not
@@ -72,7 +85,7 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
     "Search memories by meaning. Use this to find relevant context, past decisions, known bugs, patterns, etc.",
     {
       query: z.string().describe("Natural language search query"),
-      category: z.enum(["architecture", "bug", "pattern", "config", "decision", "snippet", "debug", "workflow", "dependency", "custom"]).optional(),
+      category: z.string().optional().describe("Filter by category name"),
       limit: z.number().optional().default(5),
       projectId: z.string().optional(),
     },
@@ -129,7 +142,7 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
     "list_memories",
     "List recent memories, optionally filtered by category.",
     {
-      category: z.enum(["architecture", "bug", "pattern", "config", "decision", "snippet", "debug", "workflow", "dependency", "custom"]).optional(),
+      category: z.string().optional().describe("Filter by category name"),
       limit: z.number().optional().default(10),
       projectId: z.string().optional(),
     },
@@ -151,6 +164,32 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
       ).join("\n");
 
       return { content: [{ type: "text" as const, text: `${result.total} memories total.\n\n${text}` }] };
+    },
+  );
+
+  // Tool: list_categories — list all available categories
+  server.tool(
+    "list_categories",
+    "List all memory categories (system + custom) with memory counts.",
+    {
+      projectId: z.string().optional(),
+    },
+    async ({ projectId }) => {
+      const categories = await store.listCategories(projectId);
+
+      if (categories.length === 0) {
+        return { content: [{ type: "text" as const, text: "No categories found." }] };
+      }
+
+      const lines = await Promise.all(
+        categories.map(async (cat) => {
+          const result = await store.list({ category: cat.name, projectId, limit: 0 });
+          const tag = cat.isSystem ? "system" : cat.isAiGenerated ? "ai" : "custom";
+          return `- **${cat.name}** (${result.total}) [${tag}] — ${cat.description}`;
+        }),
+      );
+
+      return { content: [{ type: "text" as const, text: lines.join("\n") }] };
     },
   );
 

@@ -1,18 +1,8 @@
 /** Unique identifier for a memory */
 export type MemoryId = string;
 
-/** Memory categories for developer workflow */
-export type MemoryCategory =
-  | "architecture"
-  | "bug"
-  | "pattern"
-  | "config"
-  | "decision"
-  | "snippet"
-  | "debug"
-  | "workflow"
-  | "dependency"
-  | "custom";
+/** Memory categories — system defaults + user-created */
+export type MemoryCategory = string;
 
 /** Memory importance level */
 export type MemoryImportance = "low" | "medium" | "high" | "critical";
@@ -105,6 +95,50 @@ export interface ApiKey {
   lastUsedAt?: Date;
   expiresAt?: Date;
 }
+
+/** Category definition */
+export interface Category {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  icon?: string;
+  projectId?: string;
+  isSystem: boolean;
+  isAiGenerated: boolean;
+  createdAt: Date;
+}
+
+/** Input for creating a category */
+export interface CreateCategoryInput {
+  name: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+  projectId?: string;
+}
+
+/** Input for updating a category */
+export interface UpdateCategoryInput {
+  name?: string;
+  description?: string;
+  color?: string;
+  icon?: string;
+}
+
+/** System categories seeded on init */
+export const SYSTEM_CATEGORIES: { name: string; description: string; color: string }[] = [
+  { name: "architecture", description: "System design, structure, diagrams", color: "#3b82f6" },
+  { name: "bug", description: "Bug reports, fixes, error patterns", color: "#ef4444" },
+  { name: "pattern", description: "Code patterns, conventions, best practices", color: "#10b981" },
+  { name: "config", description: "Configuration, environment variables, settings", color: "#f59e0b" },
+  { name: "decision", description: "Technical decisions, tradeoffs, rationale", color: "#8b5cf6" },
+  { name: "snippet", description: "Code snippets, templates, examples", color: "#ec4899" },
+  { name: "debug", description: "Debugging notes, traces, inspections", color: "#eab308" },
+  { name: "workflow", description: "Processes, pipelines, deploy steps", color: "#06b6d4" },
+  { name: "dependency", description: "Package versions, library notes", color: "#f97316" },
+  { name: "custom", description: "Uncategorized memories", color: "#64748b" },
+];
 
 /** Server config */
 export interface PonderConfig {

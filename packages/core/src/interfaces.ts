@@ -8,6 +8,9 @@ import type {
   ListMemoriesFilter,
   PaginatedResult,
   ApiKey,
+  Category,
+  CreateCategoryInput,
+  UpdateCategoryInput,
 } from "./types.js";
 
 /** Storage backend interface — implemented by sqlite-store, pg-store, etc. */
@@ -62,6 +65,23 @@ export interface StorageAdapter {
 
   /** Count API keys */
   countApiKeys(): Promise<number>;
+
+  // ── Categories ──
+
+  /** List categories (optionally filtered by project) */
+  listCategories(projectId?: string): Promise<Category[]>;
+
+  /** Get category by name (and optional project) */
+  getCategoryByName(name: string, projectId?: string): Promise<Category | null>;
+
+  /** Create a new category */
+  createCategory(input: CreateCategoryInput & { isSystem?: boolean; isAiGenerated?: boolean }): Promise<Category>;
+
+  /** Update a category */
+  updateCategory(id: string, input: UpdateCategoryInput): Promise<Category>;
+
+  /** Delete a category */
+  deleteCategory(id: string): Promise<boolean>;
 }
 
 /** Embedding provider interface */
