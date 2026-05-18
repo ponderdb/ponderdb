@@ -60,7 +60,7 @@ export function Layout({ children, view, onViewChange, apiKey, onApiKeyChange, h
             <label>Project</label>
             <div style={{ display: "flex", gap: 4 }}>
               <select value={projectId} onChange={(e) => onProjectChange(e.target.value)} style={{ flex: 1 }}>
-                <option value="">All Projects</option>
+                {projects.length === 0 && <option value="">No projects</option>}
                 {projects.map((p) => (
                   <option key={p.slug} value={p.slug}>{p.name}</option>
                 ))}
@@ -103,7 +103,7 @@ export function Layout({ children, view, onViewChange, apiKey, onApiKeyChange, h
                 )}
               </>
             ) : (
-              <span className="top-bar-all-projects">All Projects</span>
+              <span className="top-bar-all-projects">No project selected</span>
             )}
           </div>
         </header>

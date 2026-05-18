@@ -1229,6 +1229,21 @@ code {
   border-top: 1px solid var(--border-light);
 }
 
+/* Active project card */
+.project-card-active {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+
+.project-active-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
 /* Top bar count */
 .top-bar-count {
   font-size: 11px;

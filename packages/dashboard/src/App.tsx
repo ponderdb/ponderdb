@@ -39,9 +39,18 @@ export function App() {
   const loadProjects = useCallback(() => {
     if (!apiKey) { setProjects([]); return; }
     listProjects(apiKey)
-      .then((r) => setProjects(r.projects))
+      .then((r) => {
+        setProjects(r.projects);
+        // Auto-select first project if none selected or current doesn't exist
+        if (r.projects.length > 0) {
+          const currentExists = r.projects.some((p) => p.slug === projectId);
+          if (!projectId || !currentExists) {
+            setProjectId(r.projects[0].slug);
+          }
+        }
+      })
       .catch(() => setProjects([]));
-  }, [apiKey]);
+  }, [apiKey, projectId]);
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
 
@@ -63,6 +72,24 @@ export function App() {
         <p>Make sure server is running on port 7437</p>
       </div>
     );
+
+  // If API key set but no projects exist, force project creation
+  if (apiKey && projects.length === 0 && healthy) {
+    return (
+      <Layout
+        view="projects"
+        onViewChange={handleViewChange}
+        apiKey={apiKey}
+        onApiKeyChange={setApiKey}
+        healthy={true}
+        projects={projects}
+        projectId={projectId}
+        onProjectChange={setProjectId}
+      >
+        <Projects apiKey={apiKey} currentProjectId={projectId} onProjectsChanged={loadProjects} />
+      </Layout>
+    );
+  }
 
   return (
     <Layout
@@ -86,7 +113,7 @@ export function App() {
       )}
       {view === "categories" && <Categories apiKey={apiKey} projectId={projectId} onSelectMemory={handleSelectMemory} />}
       {view === "keys" && <ApiKeys apiKey={apiKey} />}
-      {view === "projects" && <Projects apiKey={apiKey} onProjectsChanged={loadProjects} />}
+      {view === "projects" && <Projects apiKey={apiKey} currentProjectId={projectId} onProjectsChanged={loadProjects} />}
     </Layout>
   );
 }
