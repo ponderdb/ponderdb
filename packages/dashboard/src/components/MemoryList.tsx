@@ -18,14 +18,27 @@ const CATEGORIES = [
 ];
 const PAGE_SIZE = 20;
 
-export function MemoryList({ apiKey }: { apiKey: string }) {
+interface MemoryListProps {
+  apiKey: string;
+  initialMemory?: Memory | null;
+  onMemoryConsumed?: () => void;
+}
+
+export function MemoryList({ apiKey, initialMemory, onMemoryConsumed }: MemoryListProps) {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [category, setCategory] = useState("");
   const [searchText, setSearchText] = useState("");
-  const [selected, setSelected] = useState<Memory | null>(null);
+  const [selected, setSelected] = useState<Memory | null>(initialMemory || null);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (initialMemory) {
+      setSelected(initialMemory);
+      onMemoryConsumed?.();
+    }
+  }, [initialMemory]);
 
   const load = useCallback(() => {
     if (!apiKey) return;
