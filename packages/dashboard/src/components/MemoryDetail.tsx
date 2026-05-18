@@ -39,6 +39,7 @@ export function MemoryDetail({ memory, onBack, onDelete }: Props) {
         <div><strong>Updated:</strong> {new Date(memory.updatedAt).toLocaleString()}</div>
         <div><strong>Last Accessed:</strong> {new Date(memory.accessedAt).toLocaleString()}</div>
         <div><strong>Access Count:</strong> {memory.accessCount}</div>
+        <div><strong>Tokens:</strong> {(memory.tokenCount || 0).toLocaleString()}</div>
         <div><strong>Version:</strong> {memory.version}</div>
       </div>
     </div>

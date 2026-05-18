@@ -13,6 +13,7 @@ interface Memory {
   updatedAt: string;
   accessedAt: string;
   accessCount: number;
+  tokenCount: number;
   version: number;
 }
 

@@ -43,6 +43,13 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   return denom === 0 ? 0 : dot / denom;
 }
 
+/** Estimate token count for text (GPT-style ~4 chars/token average) */
+export function estimateTokens(text: string): number {
+  // Rough but practical: split on whitespace + punctuation boundaries
+  // Average English word is ~1.3 tokens, average token is ~4 chars
+  return Math.ceil(text.length / 4);
+}
+
 /** Generate URL-friendly slug from string */
 export function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");

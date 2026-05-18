@@ -151,6 +151,7 @@ export function Dashboard({ apiKey, projectId, onSelectMemory }: DashboardProps)
   const importanceMap = new Map<string, number>();
   const tagMap = new Map<string, number>();
   let totalAccesses = 0;
+  let totalTokens = 0;
 
   for (const m of allMemories) {
     categoryMap.set(m.category, (categoryMap.get(m.category) || 0) + 1);
@@ -159,6 +160,7 @@ export function Dashboard({ apiKey, projectId, onSelectMemory }: DashboardProps)
       tagMap.set(t, (tagMap.get(t) || 0) + 1);
     }
     totalAccesses += m.accessCount;
+    totalTokens += m.tokenCount || 0;
   }
 
   const categories = [...categoryMap.entries()]
@@ -186,10 +188,7 @@ export function Dashboard({ apiKey, projectId, onSelectMemory }: DashboardProps)
   const maxTag = Math.max(...topTags.map((t) => t.value), 1);
   const uniqueTags = tagMap.size;
 
-  // Average content length
-  const avgContentLen = allMemories.length > 0
-    ? Math.round(allMemories.reduce((s, m) => s + m.content.length, 0) / allMemories.length)
-    : 0;
+  // totalTokens already computed above in the loop
 
   return (
     <div className={`dashboard-page ${visible ? "dashboard-visible" : ""}`}>
@@ -203,7 +202,7 @@ export function Dashboard({ apiKey, projectId, onSelectMemory }: DashboardProps)
         categories={categories.length}
         uniqueTags={uniqueTags}
         totalAccesses={totalAccesses}
-        avgContentLen={avgContentLen}
+        totalTokens={totalTokens}
       />
 
       <div className="dashboard-grid">
@@ -259,26 +258,26 @@ function StatCards({
   categories,
   uniqueTags,
   totalAccesses,
-  avgContentLen,
+  totalTokens,
 }: {
   total: number;
   categories: number;
   uniqueTags: number;
   totalAccesses: number;
-  avgContentLen: number;
+  totalTokens: number;
 }) {
   const animTotal = useCountUp(total);
   const animCat = useCountUp(categories);
   const animTags = useCountUp(uniqueTags);
   const animAccesses = useCountUp(totalAccesses);
-  const animAvg = useCountUp(avgContentLen);
+  const animAvg = useCountUp(totalTokens);
 
   const stats = [
     { value: animTotal, label: "Total Memories", icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10", color: "var(--accent)" },
     { value: animCat, label: "Categories", icon: "M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z", color: "#8b5cf6" },
     { value: animTags, label: "Unique Tags", icon: "M7 20l4-16m2 16l4-16M6 9h14M4 15h14", color: "#10b981" },
     { value: animAccesses, label: "Total Accesses", icon: "M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z", color: "#f59e0b" },
-    { value: animAvg, label: "Avg Length (chars)", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", color: "#ec4899" },
+    { value: animAvg, label: "Total Tokens", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", color: "#ec4899" },
   ];
 
   return (

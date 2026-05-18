@@ -24,6 +24,7 @@ import {
   generateApiKey,
   hashApiKey,
   slugify,
+  estimateTokens,
   MemoryNotFoundError,
   DuplicateKeyError,
   SYSTEM_CATEGORIES,
@@ -43,6 +44,7 @@ interface SqliteRow {
   updated_at: string;
   accessed_at: string;
   access_count: number;
+  token_count: number;
   version: number;
 }
 
@@ -106,6 +108,7 @@ export class SqliteStore implements StorageAdapter {
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
         accessed_at TEXT NOT NULL DEFAULT (datetime('now')),
         access_count INTEGER NOT NULL DEFAULT 0,
+        token_count INTEGER NOT NULL DEFAULT 0,
         version INTEGER NOT NULL DEFAULT 1,
         UNIQUE(key, project_id)
       );
@@ -184,10 +187,11 @@ export class SqliteStore implements StorageAdapter {
     const id = generateId();
     const now = new Date().toISOString();
     const embeddingBlob = input.embedding ? embeddingToBlob(input.embedding) : null;
+    const tokenCount = estimateTokens(input.content);
 
     const insertMemory = this.db.prepare(`
-      INSERT INTO memories (id, key, content, category, importance, tags, metadata, embedding, project_id, created_at, updated_at, accessed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO memories (id, key, content, category, importance, tags, metadata, embedding, project_id, token_count, created_at, updated_at, accessed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertVec = this.db.prepare(`
@@ -199,7 +203,7 @@ export class SqliteStore implements StorageAdapter {
         id, input.key, input.content,
         input.category ?? "custom", input.importance ?? "medium",
         JSON.stringify(input.tags ?? []), JSON.stringify(input.metadata ?? {}),
-        embeddingBlob, input.projectId ?? null,
+        embeddingBlob, input.projectId ?? null, tokenCount,
         now, now, now,
       );
       if (embeddingBlob) {
@@ -236,6 +240,8 @@ export class SqliteStore implements StorageAdapter {
     if (input.content !== undefined) {
       sets.push("content = ?");
       params.push(input.content);
+      sets.push("token_count = ?");
+      params.push(estimateTokens(input.content));
     }
     if (input.category !== undefined) {
       sets.push("category = ?");
@@ -651,6 +657,7 @@ export class SqliteStore implements StorageAdapter {
       updatedAt: new Date(row.updated_at),
       accessedAt: new Date(row.accessed_at),
       accessCount: row.access_count,
+      tokenCount: row.token_count,
       version: row.version,
     };
   }

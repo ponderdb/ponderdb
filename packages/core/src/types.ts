@@ -22,6 +22,7 @@ export interface Memory {
   updatedAt: Date;
   accessedAt: Date;
   accessCount: number;
+  tokenCount: number;
   version: number;
 }
 
