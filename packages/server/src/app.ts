@@ -32,7 +32,7 @@ export function createApp(deps: AppDeps) {
   }
 
   // Health check
-  app.get("/health", (c) => c.json({ status: "ok", version: "0.1.0" }));
+  app.get("/health", (c) => c.json({ status: "ok", version: "0.1.1" }));
 
   // MCP over HTTP (auth via API key, sessions managed by MCP protocol)
   app.route("/mcp", mcpHttpRouter(deps));
