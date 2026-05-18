@@ -1,14 +1,16 @@
 # @ponderdb/sdk
 
-TypeScript SDK for PonderDB — programmatic access to the AI agent memory server.
+TypeScript SDK for PonderDB — use AI agent memory in your code.
 
-## Installation
+Requires a running [PonderDB server](https://www.npmjs.com/package/@ponderdb/server).
+
+## Install
 
 ```bash
 npm install @ponderdb/sdk
 ```
 
-## Quick Start
+## Usage
 
 ```typescript
 import { PonderClient } from "@ponderdb/sdk";
@@ -16,119 +18,30 @@ import { PonderClient } from "@ponderdb/sdk";
 const ponder = new PonderClient({
   baseUrl: "http://127.0.0.1:7437",
   apiKey: "pndr_YOUR_KEY",
-  projectId: "my-project", // optional — scopes all operations
-});
-```
-
-## API
-
-### Remember (Store)
-
-```typescript
-await ponder.remember({
-  key: "auth/jwt-config",
-  content: "JWT uses RS256 with 15min expiry and 7-day refresh tokens",
-  category: "config",      // optional — auto-detected if omitted
-  importance: "high",      // optional — "low" | "medium" | "high" | "critical"
-  tags: ["auth", "jwt"],   // optional
-});
-```
-
-### Recall (Get)
-
-```typescript
-const memory = await ponder.recall("auth/jwt-config");
-// Returns Memory object or null if not found
-
-console.log(memory?.content);      // "JWT uses RS256..."
-console.log(memory?.category);     // "config"
-console.log(memory?.tokenCount);   // 15
-console.log(memory?.accessCount);  // 3
-```
-
-### Search
-
-```typescript
-const results = await ponder.search({
-  query: "how does authentication work",
-  category: "config",  // optional filter
-  limit: 5,
+  projectId: "my-project",
 });
 
-for (const r of results) {
-  console.log(`${r.memory.key} — score: ${r.score} (${r.matchType})`);
-}
+// Store
+await ponder.remember({ key: "auth/jwt", content: "RS256, 15min expiry", tags: ["auth"] });
+
+// Get
+const memory = await ponder.recall("auth/jwt");
+
+// Search
+const results = await ponder.search({ query: "authentication", limit: 5 });
+
+// List
+const page = await ponder.list({ category: "config", limit: 20 });
+
+// Delete
+await ponder.forget("auth/jwt");
 ```
 
-### List
+## Getting API Key & Project ID
 
-```typescript
-const page = await ponder.list({
-  category: "architecture",
-  sortBy: "updatedAt",
-  sortOrder: "desc",
-  limit: 20,
-  offset: 0,
-});
-
-console.log(`${page.total} total, showing ${page.items.length}`);
-```
-
-### Forget (Delete)
-
-```typescript
-await ponder.forget("auth/jwt-config");
-```
-
-### Stats
-
-```typescript
-const stats = await ponder.stats();
-console.log(`${stats.total} memories, server ${stats.version}`);
-```
-
-## Project Scoping
-
-Pass `projectId` in the constructor to scope all operations:
-
-```typescript
-const ponder = new PonderClient({
-  baseUrl: "http://127.0.0.1:7437",
-  apiKey: "pndr_YOUR_KEY",
-  projectId: "my-backend-api",
-});
-
-// All operations scoped to "my-backend-api"
-await ponder.remember({ key: "db/schema", content: "..." });
-const mem = await ponder.recall("db/schema");
-```
-
-Or override per-call:
-
-```typescript
-const mem = await ponder.recall("db/schema", "other-project");
-```
-
-## Error Handling
-
-```typescript
-import { PonderApiError } from "@ponderdb/sdk";
-
-try {
-  await ponder.recall("nonexistent");
-} catch (err) {
-  if (err instanceof PonderApiError) {
-    console.log(err.statusCode); // 404
-    console.log(err.code);       // "MEMORY_NOT_FOUND"
-    console.log(err.message);    // "Memory not found: nonexistent"
-  }
-}
-```
-
-## Requirements
-
-- Node.js >= 22 (or any runtime with global `fetch`)
-- PonderDB server running
+1. Run `ponderdb-server` and open `http://127.0.0.1:7437`
+2. API key shown on first start — or create one in **API Keys**
+3. Create a project in **Projects** — the slug is your project ID
 
 ## License
 
