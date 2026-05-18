@@ -1,19 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { listMemories } from "../api";
+import { listMemories, listCategories } from "../api";
 import type { Memory } from "../api";
-
-const CATEGORY_COLORS: Record<string, string> = {
-  architecture: "#3b82f6",
-  bug: "#ef4444",
-  pattern: "#10b981",
-  config: "#f59e0b",
-  decision: "#8b5cf6",
-  snippet: "#ec4899",
-  debug: "#eab308",
-  workflow: "#06b6d4",
-  dependency: "#f97316",
-  custom: "#64748b",
-};
 
 const IMPORTANCE_COLORS: Record<string, string> = {
   low: "#10b981",
@@ -133,13 +120,22 @@ export function Dashboard({ apiKey, projectId, onSelectMemory }: DashboardProps)
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [visible, setVisible] = useState(false);
+  const [categoryColors, setCategoryColors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!apiKey) { setLoading(false); return; }
-    listMemories(apiKey, { limit: 500, sortBy: "updatedAt", sortOrder: "desc", projectId: projectId || undefined })
-      .then((r) => {
-        setAllMemories(r.items);
-        setTotal(r.total);
+    Promise.all([
+      listMemories(apiKey, { limit: 500, sortBy: "updatedAt", sortOrder: "desc", projectId: projectId || undefined }),
+      listCategories(apiKey, projectId || undefined),
+    ])
+      .then(([memResult, catResult]) => {
+        setAllMemories(memResult.items);
+        setTotal(memResult.total);
+        const colors: Record<string, string> = {};
+        for (const cat of catResult.categories) {
+          colors[cat.name] = cat.color;
+        }
+        setCategoryColors(colors);
       })
       .catch(() => {})
       .finally(() => {
@@ -166,7 +162,7 @@ export function Dashboard({ apiKey, projectId, onSelectMemory }: DashboardProps)
   }
 
   const categories = [...categoryMap.entries()]
-    .map(([name, count]) => ({ name, count, color: CATEGORY_COLORS[name] || "#64748b" }))
+    .map(([name, count]) => ({ name, count, color: categoryColors[name] || "#64748b" }))
     .sort((a, b) => b.count - a.count);
 
   const importances = ["critical", "high", "medium", "low"]
