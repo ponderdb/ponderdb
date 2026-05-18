@@ -215,6 +215,7 @@ Once connected, your AI tool automatically gets these tools:
 | `search_memories` | Semantic + keyword hybrid search | "Search for anything about authentication" |
 | `forget` | Delete a memory | "Forget the old deploy process" |
 | `list_memories` | List memories with optional filters | "List all architecture decisions" |
+| `list_categories` | List all categories (system + custom) with counts | "What categories exist?" |
 
 The AI tool decides when to remember and recall. You don't need to do anything manually — just use your AI tool normally and it will build up project memory over time.
 
@@ -253,15 +254,129 @@ PONDER_API_KEY_REQUIRED=false npm run dev
 
 ---
 
+## Projects
+
+Projects let you organize memories into separate scopes. Each project gets its own isolated set of memories and custom categories.
+
+### Creating a Project
+
+**Via Dashboard:** Go to the Projects page and click "+ New Project". Enter a name — a URL-friendly slug is auto-generated (e.g. "My Backend API" → `my-backend-api`).
+
+**Via REST API:**
+```bash
+curl -X POST http://127.0.0.1:7437/api/projects \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My Backend API", "description": "Backend service memories"}'
+```
+
+Response includes the `slug` — this is your project ID:
+```json
+{
+  "id": "a1b2c3...",
+  "name": "My Backend API",
+  "slug": "my-backend-api",
+  "description": "Backend service memories"
+}
+```
+
+### Getting Your Project ID
+
+Your project ID is the `slug` field. Find it via:
+
+- **Dashboard:** Projects page shows the slug under each project name
+- **API:** `GET /api/projects` returns all projects with their slugs
+- **Project selector:** The sidebar dropdown value is the slug
+
+### Using Project ID with MCP
+
+Set `PONDER_PROJECT_ID` in your MCP config to scope all AI tool operations to a project:
+
+**Claude Code** (`~/.claude/settings.json`):
+```json
+{
+  "mcpServers": {
+    "ponderdb": {
+      "command": "node",
+      "args": ["/path/to/ponderdb/packages/server/dist/bin.js", "mcp"],
+      "env": {
+        "PONDER_PROJECT_ID": "my-backend-api"
+      }
+    }
+  }
+}
+```
+
+**Cursor** (`.cursor/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "ponderdb": {
+      "command": "node",
+      "args": ["/path/to/ponderdb/packages/server/dist/bin.js", "mcp"],
+      "env": {
+        "PONDER_PROJECT_ID": "my-backend-api"
+      }
+    }
+  }
+}
+```
+
+**Any MCP client** — add `PONDER_PROJECT_ID` to the `env` block. All `remember`, `recall`, `search_memories`, `forget`, and `list_memories` calls will be scoped to that project automatically.
+
+> **Without `PONDER_PROJECT_ID`:** Tools can still pass `projectId` per-call. If neither is set, memories are stored globally (no project scope).
+
+### Using Project ID with SDK
+
+```typescript
+import { PonderClient } from "@ponderdb/sdk";
+
+const ponder = new PonderClient({
+  baseUrl: "http://127.0.0.1:7437",
+  apiKey: "pndr_YOUR_KEY",
+  projectId: "my-backend-api",  // All operations scoped to this project
+});
+
+// These are all scoped to "my-backend-api"
+await ponder.remember({ key: "auth/jwt", content: "RS256, 15min expiry" });
+const mem = await ponder.recall("auth/jwt");
+await ponder.search({ query: "authentication" });
+```
+
+### Using Project ID with CLI
+
+```bash
+export PONDER_PROJECT_ID=my-backend-api
+
+ponder remember "auth/jwt" "RS256, 15min expiry" --project my-backend-api
+ponder recall "auth/jwt" --project my-backend-api
+ponder list --project my-backend-api
+```
+
+### Project API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/projects` | List all projects with memory counts |
+| `POST` | `/api/projects` | Create a new project |
+| `GET` | `/api/projects/:slug` | Get project details |
+| `PUT` | `/api/projects/:id` | Update project name/description |
+| `DELETE` | `/api/projects/:id` | Delete project (cascades: all memories, vectors, categories) |
+| `GET` | `/api/projects/:slug/stats` | Per-project statistics |
+
+---
+
 ## Web Dashboard
 
 PonderDB includes a built-in web dashboard at `http://127.0.0.1:7437` when running in HTTP mode.
 
 **Features:**
-- **Memory Browser** — List, filter by category, paginate through all memories
-- **Memory Detail** — View full content, metadata, access stats, version history
-- **Semantic Search** — Search memories by meaning with relevance scores
-- **API Key Management** — Create, view, and revoke API keys
+- **Dashboard** — Animated stats (total memories, categories, tags, accesses, tokens), bar charts, clickable mini-tables
+- **Memory Browser** — List, filter by category, paginate, click to detail view with token count
+- **Categories** — Dynamic categories (system + custom + AI-generated), create/edit/delete with color picker
+- **Projects** — Create and manage projects, view memory counts, cascade delete
+- **API Key Management** — Create, view, copy, and revoke API keys
+- **Project Selector** — Filter all views by project via sidebar dropdown
 
 The dashboard is served as static files from the same Hono server — no extra setup needed. Just start the server and open `http://127.0.0.1:7437` in your browser.
 
@@ -286,6 +401,17 @@ All endpoints require `Authorization: Bearer pndr_xxx` header (unless auth is di
 | `POST` | `/api/auth/keys` | Generate new API key |
 | `GET` | `/api/auth/keys` | List API keys |
 | `DELETE` | `/api/auth/keys/:id` | Revoke an API key |
+| `GET` | `/api/categories` | List categories (system + custom) |
+| `POST` | `/api/categories` | Create custom category |
+| `PUT` | `/api/categories/:id` | Update category |
+| `DELETE` | `/api/categories/:id` | Delete category (reassigns memories) |
+| `POST` | `/api/categories/suggest` | AI suggest category for content |
+| `GET` | `/api/projects` | List all projects |
+| `POST` | `/api/projects` | Create project |
+| `GET` | `/api/projects/:slug` | Get project details |
+| `PUT` | `/api/projects/:id` | Update project |
+| `DELETE` | `/api/projects/:id` | Delete project (cascade) |
+| `GET` | `/api/projects/:slug/stats` | Project statistics |
 
 ### Examples
 
@@ -360,6 +486,7 @@ import { PonderClient } from "@ponderdb/sdk";
 const ponder = new PonderClient({
   baseUrl: "http://127.0.0.1:7437",
   apiKey: "pndr_YOUR_KEY",
+  projectId: "my-backend-api",  // optional — scopes all operations
 });
 
 // Store
@@ -436,7 +563,7 @@ ponderdb/
 
 ### Memory Categories
 
-Memories are auto-categorized based on content:
+PonderDB ships with 10 system categories. You can also create custom categories via the dashboard or API (`POST /api/categories`). Memories are auto-categorized based on content:
 
 | Category | Detected When Content Contains |
 |----------|-------------------------------|
@@ -463,6 +590,8 @@ Environment variables or `.env` file:
 | `PONDER_HOST` | `127.0.0.1` | Server host |
 | `PONDER_DATA_DIR` | `~/.ponderdb` | Data directory (SQLite DB stored here) |
 | `PONDER_API_KEY_REQUIRED` | `true` | Require API key for REST API |
+| `PONDER_PROJECT_ID` | _(none)_ | Default project ID for MCP operations |
+| `PONDER_EMBEDDER` | `transformer` | Embedding provider (`transformer` or `local`) |
 
 ---
 

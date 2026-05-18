@@ -4,10 +4,11 @@ import { Dashboard } from "./components/Dashboard";
 import { MemoryList } from "./components/MemoryList";
 import { Categories } from "./components/Categories";
 import { ApiKeys } from "./components/ApiKeys";
-import { fetchHealth, listMemories } from "./api";
-import type { Memory } from "./api";
+import { Projects } from "./components/Projects";
+import { fetchHealth, listProjects } from "./api";
+import type { Memory, ProjectInfo } from "./api";
 
-type View = "dashboard" | "memories" | "categories" | "keys";
+type View = "dashboard" | "memories" | "categories" | "keys" | "projects";
 
 export function App() {
   const [apiKey, setApiKey] = useState(
@@ -16,7 +17,7 @@ export function App() {
   const [view, setView] = useState<View>("dashboard");
   const [healthy, setHealthy] = useState<boolean | null>(null);
   const [selectedMemory, setSelectedMemory] = useState<Memory | null>(null);
-  const [projects, setProjects] = useState<string[]>([]);
+  const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [projectId, setProjectId] = useState<string>(
     () => localStorage.getItem("ponderdb_project") || "",
   );
@@ -35,19 +36,23 @@ export function App() {
     localStorage.setItem("ponderdb_project", projectId);
   }, [projectId]);
 
-  // Fetch distinct projects when apiKey changes
-  useEffect(() => {
+  const loadProjects = useCallback(() => {
     if (!apiKey) { setProjects([]); return; }
-    listMemories(apiKey, { limit: 500, sortBy: "updatedAt", sortOrder: "desc" })
+    listProjects(apiKey)
       .then((r) => {
-        const ids = new Set<string>();
-        for (const m of r.items) {
-          if (m.projectId) ids.add(m.projectId);
+        setProjects(r.projects);
+        // Auto-select first project if none selected or current doesn't exist
+        if (r.projects.length > 0) {
+          const currentExists = r.projects.some((p) => p.slug === projectId);
+          if (!projectId || !currentExists) {
+            setProjectId(r.projects[0].slug);
+          }
         }
-        setProjects([...ids].sort());
       })
       .catch(() => setProjects([]));
-  }, [apiKey]);
+  }, [apiKey, projectId]);
+
+  useEffect(() => { loadProjects(); }, [loadProjects]);
 
   const handleSelectMemory = useCallback((memory: Memory) => {
     setSelectedMemory(memory);
@@ -67,6 +72,24 @@ export function App() {
         <p>Make sure server is running on port 7437</p>
       </div>
     );
+
+  // If API key set but no projects exist, force project creation
+  if (apiKey && projects.length === 0 && healthy) {
+    return (
+      <Layout
+        view="projects"
+        onViewChange={handleViewChange}
+        apiKey={apiKey}
+        onApiKeyChange={setApiKey}
+        healthy={true}
+        projects={projects}
+        projectId={projectId}
+        onProjectChange={setProjectId}
+      >
+        <Projects apiKey={apiKey} currentProjectId={projectId} onProjectsChanged={loadProjects} />
+      </Layout>
+    );
+  }
 
   return (
     <Layout
@@ -90,6 +113,7 @@ export function App() {
       )}
       {view === "categories" && <Categories apiKey={apiKey} projectId={projectId} onSelectMemory={handleSelectMemory} />}
       {view === "keys" && <ApiKeys apiKey={apiKey} />}
+      {view === "projects" && <Projects apiKey={apiKey} currentProjectId={projectId} onProjectsChanged={loadProjects} />}
     </Layout>
   );
 }
