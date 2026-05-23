@@ -9,6 +9,7 @@ import type { StorageAdapter, EmbeddingProvider } from "@ponderdb/core";
 import { PonderError } from "@ponderdb/core";
 import { memoriesRouter } from "./routes/memories.js";
 import { authRouter } from "./routes/auth.js";
+import { oauthRouter } from "./routes/oauth.js";
 import { categoriesRouter } from "./routes/categories.js";
 import { projectsRouter } from "./routes/projects.js";
 import { authMiddleware } from "./middleware/auth.js";
@@ -39,13 +40,16 @@ export function createApp(deps: AppDeps) {
     app.use("/mcp/*", authMiddleware(deps.store));
   }
 
-  // Health check
+  // Health check (no auth)
   app.get("/health", (c) => c.json({ status: "ok", version: "0.2.1" }));
+
+  // OAuth routes (no auth — these ARE the login flow)
+  app.route("/auth", oauthRouter(deps.store));
 
   // MCP over HTTP (auth via API key, sessions managed by MCP protocol)
   app.route("/mcp", mcpHttpRouter(deps));
 
-  // API routes
+  // API routes (auth required)
   app.route("/api/memories", memoriesRouter(deps));
   app.route("/api/auth", authRouter(deps));
   app.route("/api/categories", categoriesRouter(deps));
