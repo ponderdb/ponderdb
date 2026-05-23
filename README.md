@@ -210,12 +210,20 @@ Once connected, your AI tool automatically gets these tools:
 
 | Tool | Description | Example |
 |------|-------------|---------|
-| `remember` | Store a memory (auto-categorized, with embeddings) | "Remember that auth uses JWT RS256" |
+| `remember` | Store a memory (auto-categorized, with embeddings, optional `isGlobal`) | "Remember that auth uses JWT RS256" |
 | `recall` | Retrieve a specific memory by key | "Recall the JWT config" |
-| `search_memories` | Semantic + keyword hybrid search | "Search for anything about authentication" |
+| `search_memories` | Semantic + keyword hybrid search (includes global memories) | "Search for anything about authentication" |
 | `forget` | Delete a memory | "Forget the old deploy process" |
-| `list_memories` | List memories with optional filters | "List all architecture decisions" |
+| `list_memories` | List memories with optional filters (includes global memories) | "List all architecture decisions" |
 | `list_categories` | List all categories (system + custom) with counts | "What categories exist?" |
+| `create_category` | Create a custom memory category | "Create a category called api-notes" |
+| `update_category` | Update a custom category's name, description, or color | "Rename category api-notes to api-docs" |
+| `delete_category` | Delete a custom category (memories reassigned to `custom`) | "Delete the api-notes category" |
+| `list_projects` | List all memory projects | "What projects exist?" |
+| `create_project` | Create a new project to organize memories | "Create a project called My Backend API" |
+| `update_project` | Update a project's name or description | "Update the backend project description" |
+| `delete_project` | Delete a project and all its memories (requires confirmation) | "Delete the old-project project" |
+| `tag_memory` | Add or remove tags on an existing memory | "Add tags auth and security to auth/jwt" |
 
 The AI tool decides when to remember and recall. You don't need to do anything manually — just use your AI tool normally and it will build up project memory over time.
 
@@ -322,9 +330,25 @@ Set `PONDER_PROJECT_ID` in your MCP config to scope all AI tool operations to a 
 }
 ```
 
-**Any MCP client** — add `PONDER_PROJECT_ID` to the `env` block. All `remember`, `recall`, `search_memories`, `forget`, and `list_memories` calls will be scoped to that project automatically.
+**Any MCP client (stdio)** — add `PONDER_PROJECT_ID` to the `env` block. All `remember`, `recall`, `search_memories`, `forget`, and `list_memories` calls will be scoped to that project automatically.
 
-> **Without `PONDER_PROJECT_ID`:** Tools can still pass `projectId` per-call. If neither is set, memories are stored globally (no project scope).
+**HTTP MCP** — use the `X-Project-ID` header to scope all operations to a project:
+```json
+{
+  "mcpServers": {
+    "ponderdb": {
+      "type": "http",
+      "url": "http://127.0.0.1:7437/mcp",
+      "headers": {
+        "Authorization": "Bearer pndr_YOUR_KEY",
+        "X-Project-ID": "my-backend-api"
+      }
+    }
+  }
+}
+```
+
+> **Priority:** `X-Project-ID` header > `PONDER_PROJECT_ID` env var > per-call `projectId` param. If none set, memories are stored globally (no project scope).
 
 ### Using Project ID with SDK
 
@@ -626,25 +650,32 @@ npm run clean        # Remove build artifacts
 
 ## Roadmap
 
-### Phase 1 — MVP (current)
+### Phase 1 — MVP ✅
 - [x] Monorepo scaffold with npm workspaces
 - [x] Core types, interfaces, storage abstractions
 - [x] SQLite storage adapter (local-first)
 - [x] Hono REST API server
 - [x] MCP server (stdio transport)
 - [x] MCP over HTTP (Streamable HTTP transport)
-- [x] Web dashboard (memory browser, search, API key management)
+- [x] Web dashboard (memory browser, categories, projects, API key management)
 - [x] API key authentication
 - [x] TypeScript SDK
 - [x] CLI tool
+- [x] sqlite-vec for native vector search
+- [x] Transformer embeddings (all-MiniLM-L6-v2)
+- [x] Project scoping (`projectId` across all layers)
+- [x] Global memories (`isGlobal` — accessible across all projects)
+- [x] Custom styled dashboard (full-width layout, custom dropdowns, setup screen)
 - [ ] Real embedding models (BGE / OpenAI)
-- [ ] sqlite-vec for native vector search
 - [ ] npm publish (`@ponderdb/server`, `@ponderdb/cli`, `@ponderdb/sdk`)
 
-### Phase 2 — Cloud
+### Phase 2 — Cloud (in progress)
+- [x] Multi-user data model (User type, `userId` scoping on projects + API keys)
+- [x] Auth middleware with user context extraction
+- [ ] PostgreSQL + pgvector storage adapter (`@ponderdb/pg-store`)
+- [ ] Google + GitHub OAuth login
+- [ ] JWT session management for web dashboard
 - [ ] Cloud sync (local <-> cloud)
-- [ ] PostgreSQL + pgvector storage adapter
-- [ ] User accounts + web auth
 - [ ] Team/shared memories
 - [ ] Hosted service at ponderdb.dev
 

@@ -14,6 +14,9 @@ import type {
   Project,
   CreateProjectInput,
   UpdateProjectInput,
+  User,
+  CreateUserInput,
+  UpdateUserInput,
 } from "./types.js";
 
 /** Storage backend interface — implemented by sqlite-store, pg-store, etc. */
@@ -54,20 +57,39 @@ export interface StorageAdapter {
   /** Record an access (bump accessedAt + accessCount) */
   recordAccess(id: MemoryId): Promise<void>;
 
+  // ── Users ──
+
+  /** Create a new user */
+  createUser(input: CreateUserInput): Promise<User>;
+
+  /** Get user by ID */
+  getUserById(id: string): Promise<User | null>;
+
+  /** Get user by email */
+  getUserByEmail(email: string): Promise<User | null>;
+
+  /** Update a user */
+  updateUser(id: string, input: UpdateUserInput): Promise<User>;
+
+  /** List all users */
+  listUsers(): Promise<User[]>;
+
+  // ── API Keys ──
+
   /** Create an API key (store hash, return full key only once) */
-  createApiKey(name: string): Promise<{ apiKey: ApiKey; rawKey: string }>;
+  createApiKey(name: string, userId: string): Promise<{ apiKey: ApiKey; rawKey: string }>;
 
   /** Validate an API key by its raw value, returns key record if valid */
   validateApiKey(rawKey: string): Promise<ApiKey | null>;
 
-  /** List all API keys (without hashes) */
-  listApiKeys(): Promise<ApiKey[]>;
+  /** List API keys for a user */
+  listApiKeys(userId: string): Promise<ApiKey[]>;
 
   /** Delete an API key */
   deleteApiKey(id: string): Promise<boolean>;
 
-  /** Count API keys */
-  countApiKeys(): Promise<number>;
+  /** Count API keys for a user */
+  countApiKeys(userId: string): Promise<number>;
 
   // ── Categories ──
 
@@ -88,14 +110,14 @@ export interface StorageAdapter {
 
   // ── Projects ──
 
-  /** List all projects */
-  listProjects(): Promise<Project[]>;
+  /** List all projects for a user */
+  listProjects(userId: string): Promise<Project[]>;
 
-  /** Get project by slug */
-  getProjectBySlug(slug: string): Promise<Project | null>;
+  /** Get project by slug for a user */
+  getProjectBySlug(slug: string, userId: string): Promise<Project | null>;
 
   /** Create a new project */
-  createProject(input: CreateProjectInput): Promise<Project>;
+  createProject(input: CreateProjectInput & { userId: string }): Promise<Project>;
 
   /** Update a project */
   updateProject(id: string, input: UpdateProjectInput): Promise<Project>;

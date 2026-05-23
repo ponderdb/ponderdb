@@ -19,6 +19,10 @@ export function authMiddleware(store: StorageAdapter): MiddlewareHandler {
       throw new AuthenticationError("Invalid or expired API key");
     }
 
+    // Set userId on context for downstream routes
+    c.set("userId", apiKey.userId);
+    c.set("apiKeyId", apiKey.id);
+
     await next();
   };
 }

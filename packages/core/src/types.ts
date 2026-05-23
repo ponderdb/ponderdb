@@ -88,6 +88,27 @@ export interface ListMemoriesFilter {
   sortOrder?: "asc" | "desc";
 }
 
+/** User account */
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Input for creating a user */
+export interface CreateUserInput {
+  email: string;
+  name: string;
+}
+
+/** Input for updating a user */
+export interface UpdateUserInput {
+  name?: string;
+  email?: string;
+}
+
 /** API key */
 export interface ApiKey {
   id: string;
@@ -106,6 +127,7 @@ export interface Project {
   name: string;
   slug: string;
   description: string;
+  userId: string;
   createdAt: Date;
   updatedAt: Date;
 }

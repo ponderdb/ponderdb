@@ -18,6 +18,9 @@ import type {
   Project,
   CreateProjectInput,
   UpdateProjectInput,
+  User,
+  CreateUserInput,
+  UpdateUserInput,
 } from "@ponderdb/core";
 import {
   generateId,
@@ -66,6 +69,15 @@ interface ProjectRow {
   name: string;
   slug: string;
   description: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface UserRow {
+  id: string;
+  email: string;
+  name: string;
   created_at: string;
   updated_at: string;
 }
@@ -147,13 +159,23 @@ export class SqliteStore implements StorageAdapter {
     }
 
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
       CREATE TABLE IF NOT EXISTS projects (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        slug TEXT NOT NULL UNIQUE,
+        slug TEXT NOT NULL,
         description TEXT NOT NULL DEFAULT '',
+        user_id TEXT NOT NULL DEFAULT 'local',
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(slug, user_id)
       );
 
       CREATE TABLE IF NOT EXISTS api_keys (
@@ -161,6 +183,7 @@ export class SqliteStore implements StorageAdapter {
         name TEXT NOT NULL,
         key_hash TEXT NOT NULL UNIQUE,
         prefix TEXT NOT NULL,
+        user_id TEXT NOT NULL DEFAULT 'local',
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         last_used_at TEXT,
         expires_at TEXT
@@ -180,6 +203,30 @@ export class SqliteStore implements StorageAdapter {
       );
       CREATE INDEX IF NOT EXISTS idx_categories_project ON categories(project_id);
     `);
+
+    // Migration: add user_id to projects if missing
+    const projCols = this.db.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
+    if (!projCols.some((c) => c.name === "user_id")) {
+      this.db.exec("ALTER TABLE projects ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local'");
+    }
+
+    // Migration: add user_id to api_keys if missing
+    const keyCols = this.db.prepare("PRAGMA table_info(api_keys)").all() as { name: string }[];
+    if (!keyCols.some((c) => c.name === "user_id")) {
+      this.db.exec("ALTER TABLE api_keys ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local'");
+    }
+
+    // Migration: drop old UNIQUE(slug) and ensure UNIQUE(slug, user_id) on projects
+    // SQLite can't alter constraints, but new DBs get it from CREATE TABLE.
+    // Existing DBs keep UNIQUE(slug) which is stricter — safe.
+
+    // Seed default local user
+    const localUser = this.db.prepare("SELECT id FROM users WHERE id = 'local'").get();
+    if (!localUser) {
+      this.db.prepare(
+        "INSERT OR IGNORE INTO users (id, email, name) VALUES ('local', 'local@ponderdb.local', 'Local User')"
+      ).run();
+    }
 
     // Seed system categories if none exist
     const catCount = (this.db.prepare("SELECT COUNT(*) as count FROM categories WHERE is_system = 1").get() as { count: number }).count;
@@ -201,7 +248,7 @@ export class SqliteStore implements StorageAdapter {
     `).all() as { project_id: string }[];
     if (orphanProjects.length > 0) {
       const insertProject = this.db.prepare(
-        "INSERT OR IGNORE INTO projects (id, name, slug, description, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))"
+        "INSERT OR IGNORE INTO projects (id, name, slug, description, user_id, created_at, updated_at) VALUES (?, ?, ?, ?, 'local', datetime('now'), datetime('now'))"
       );
       const tx = this.db.transaction(() => {
         for (const row of orphanProjects) {
@@ -487,18 +534,66 @@ export class SqliteStore implements StorageAdapter {
       .run(id);
   }
 
-  async createApiKey(name: string): Promise<{ apiKey: ApiKey; rawKey: string }> {
+  // ── Users ──
+
+  async createUser(input: CreateUserInput): Promise<User> {
+    const id = generateId();
+    const now = new Date().toISOString();
+    this.db.prepare(
+      "INSERT INTO users (id, email, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+    ).run(id, input.email, input.name, now, now);
+    return this.rowToUser(this.db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow);
+  }
+
+  async getUserById(id: string): Promise<User | null> {
+    const row = this.db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow | undefined;
+    return row ? this.rowToUser(row) : null;
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    const row = this.db.prepare("SELECT * FROM users WHERE email = ?").get(email) as UserRow | undefined;
+    return row ? this.rowToUser(row) : null;
+  }
+
+  async updateUser(id: string, input: UpdateUserInput): Promise<User> {
+    const sets: string[] = ["updated_at = datetime('now')"];
+    const params: unknown[] = [];
+    if (input.name !== undefined) { sets.push("name = ?"); params.push(input.name); }
+    if (input.email !== undefined) { sets.push("email = ?"); params.push(input.email); }
+    params.push(id);
+    this.db.prepare(`UPDATE users SET ${sets.join(", ")} WHERE id = ?`).run(...params);
+    return this.rowToUser(this.db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow);
+  }
+
+  async listUsers(): Promise<User[]> {
+    const rows = this.db.prepare("SELECT * FROM users ORDER BY created_at ASC").all() as UserRow[];
+    return rows.map((r) => this.rowToUser(r));
+  }
+
+  private rowToUser(row: UserRow): User {
+    return {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+    };
+  }
+
+  // ── API Keys ──
+
+  async createApiKey(name: string, userId: string): Promise<{ apiKey: ApiKey; rawKey: string }> {
     const { key: rawKey, prefix, hash } = generateApiKey();
     const id = generateId();
     const now = new Date().toISOString();
 
     this.db.prepare(`
-      INSERT INTO api_keys (id, name, key_hash, prefix, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(id, name, hash, prefix, now);
+      INSERT INTO api_keys (id, name, key_hash, prefix, user_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, name, hash, prefix, userId, now);
 
     return {
-      apiKey: { id, name, keyHash: hash, prefix, userId: "local", createdAt: new Date(now) },
+      apiKey: { id, name, keyHash: hash, prefix, userId, createdAt: new Date(now) },
       rawKey,
     };
   }
@@ -506,7 +601,7 @@ export class SqliteStore implements StorageAdapter {
   async validateApiKey(rawKey: string): Promise<ApiKey | null> {
     const hash = hashApiKey(rawKey);
     const row = this.db.prepare("SELECT * FROM api_keys WHERE key_hash = ?").get(hash) as {
-      id: string; name: string; key_hash: string; prefix: string;
+      id: string; name: string; key_hash: string; prefix: string; user_id: string;
       created_at: string; last_used_at: string | null; expires_at: string | null;
     } | undefined;
 
@@ -523,16 +618,16 @@ export class SqliteStore implements StorageAdapter {
       name: row.name,
       keyHash: row.key_hash,
       prefix: row.prefix,
-      userId: "local",
+      userId: row.user_id,
       createdAt: new Date(row.created_at),
       lastUsedAt: row.last_used_at ? new Date(row.last_used_at) : undefined,
       expiresAt: row.expires_at ? new Date(row.expires_at) : undefined,
     };
   }
 
-  async listApiKeys(): Promise<ApiKey[]> {
-    const rows = this.db.prepare("SELECT * FROM api_keys ORDER BY created_at DESC").all() as {
-      id: string; name: string; key_hash: string; prefix: string;
+  async listApiKeys(userId: string): Promise<ApiKey[]> {
+    const rows = this.db.prepare("SELECT * FROM api_keys WHERE user_id = ? ORDER BY created_at DESC").all(userId) as {
+      id: string; name: string; key_hash: string; prefix: string; user_id: string;
       created_at: string; last_used_at: string | null; expires_at: string | null;
     }[];
 
@@ -541,7 +636,7 @@ export class SqliteStore implements StorageAdapter {
       name: row.name,
       keyHash: "[hidden]",
       prefix: row.prefix,
-      userId: "local",
+      userId: row.user_id,
       createdAt: new Date(row.created_at),
       lastUsedAt: row.last_used_at ? new Date(row.last_used_at) : undefined,
       expiresAt: row.expires_at ? new Date(row.expires_at) : undefined,
@@ -553,8 +648,8 @@ export class SqliteStore implements StorageAdapter {
     return result.changes > 0;
   }
 
-  async countApiKeys(): Promise<number> {
-    return (this.db.prepare("SELECT COUNT(*) as count FROM api_keys").get() as { count: number }).count;
+  async countApiKeys(userId: string): Promise<number> {
+    return (this.db.prepare("SELECT COUNT(*) as count FROM api_keys WHERE user_id = ?").get(userId) as { count: number }).count;
   }
 
   // ── Categories ──
@@ -630,24 +725,24 @@ export class SqliteStore implements StorageAdapter {
 
   // ── Projects ──
 
-  async listProjects(): Promise<Project[]> {
-    const rows = this.db.prepare("SELECT * FROM projects ORDER BY name ASC").all() as ProjectRow[];
+  async listProjects(userId: string): Promise<Project[]> {
+    const rows = this.db.prepare("SELECT * FROM projects WHERE user_id = ? ORDER BY name ASC").all(userId) as ProjectRow[];
     return rows.map((r) => this.rowToProject(r));
   }
 
-  async getProjectBySlug(slug: string): Promise<Project | null> {
-    const row = this.db.prepare("SELECT * FROM projects WHERE slug = ?").get(slug) as ProjectRow | undefined;
+  async getProjectBySlug(slug: string, userId: string): Promise<Project | null> {
+    const row = this.db.prepare("SELECT * FROM projects WHERE slug = ? AND user_id = ?").get(slug, userId) as ProjectRow | undefined;
     return row ? this.rowToProject(row) : null;
   }
 
-  async createProject(input: CreateProjectInput): Promise<Project> {
+  async createProject(input: CreateProjectInput & { userId: string }): Promise<Project> {
     const id = generateId();
     const now = new Date().toISOString();
     const slug = input.slug || slugify(input.name);
     this.db.prepare(`
-      INSERT INTO projects (id, name, slug, description, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, input.name, slug, input.description ?? "", now, now);
+      INSERT INTO projects (id, name, slug, description, user_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.name, slug, input.description ?? "", input.userId, now, now);
     return this.rowToProject(this.db.prepare("SELECT * FROM projects WHERE id = ?").get(id) as ProjectRow);
   }
 
@@ -689,6 +784,7 @@ export class SqliteStore implements StorageAdapter {
       name: row.name,
       slug: row.slug,
       description: row.description,
+      userId: row.user_id,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };

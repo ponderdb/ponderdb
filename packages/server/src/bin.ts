@@ -47,11 +47,11 @@ async function main() {
     // HTTP mode — REST API with auth
     const apiKeyRequired = process.env.PONDER_API_KEY_REQUIRED !== "false";
 
-    // Auto-generate API key on first start
+    // Auto-generate API key on first start (for local user)
     if (apiKeyRequired) {
-      const keyCount = await store.countApiKeys();
+      const keyCount = await store.countApiKeys("local");
       if (keyCount === 0) {
-        const { rawKey } = await store.createApiKey("default");
+        const { rawKey } = await store.createApiKey("default", "local");
         console.log("\n  ┌─────────────────────────────────────────────────────┐");
         console.log("  │                                                     │");
         console.log("  │  Your API key (save this — shown only once):        │");
