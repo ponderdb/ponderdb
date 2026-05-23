@@ -88,13 +88,10 @@ async function main() {
       console.log(`Auth: ${apiKeyRequired ? "enabled" : "disabled"}`);
     });
 
-    // Graceful shutdown — close HTTP server then DB, force exit quickly
+    // Shutdown — exit immediately on Ctrl+C (PG pool.end() can hang)
     const shutdown = () => {
       console.log("\nShutting down...");
-      server.close(() => { /* server closed */ });
-      store.close().catch(() => { /* ignore */ }).finally(() => process.exit(0));
-      // Force exit after 2s no matter what
-      setTimeout(() => process.exit(0), 2000).unref();
+      process.exit(0);
     };
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
