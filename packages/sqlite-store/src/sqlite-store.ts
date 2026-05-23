@@ -388,6 +388,44 @@ export class SqliteStore implements StorageAdapter {
     this.db.close();
   }
 
+  async reset(): Promise<void> {
+    this.db.exec(`
+      DROP TABLE IF EXISTS vec_memories;
+      DROP TABLE IF EXISTS memory_history;
+      DROP TABLE IF EXISTS ai_suggestions;
+      DROP TABLE IF EXISTS marketplace_listings;
+      DROP TABLE IF EXISTS audit_logs;
+      DROP TABLE IF EXISTS team_members;
+      DROP TABLE IF EXISTS teams;
+      DROP TABLE IF EXISTS categories;
+      DROP TABLE IF EXISTS api_keys;
+      DROP TABLE IF EXISTS memories;
+      DROP TABLE IF EXISTS projects;
+      DROP TABLE IF EXISTS users;
+    `);
+    this.db.close();
+    await this.init();
+  }
+
+  async seed(): Promise<void> {
+    // Seed local user
+    this.db.prepare(
+      "INSERT OR IGNORE INTO users (id, email, name, provider) VALUES ('local', 'local@ponderdb.local', 'Local User', 'local')"
+    ).run();
+
+    // Seed system categories
+    const catCount = (this.db.prepare("SELECT COUNT(*) as count FROM categories WHERE is_system = 1").get() as { count: number }).count;
+    if (catCount === 0) {
+      const insert = this.db.prepare("INSERT OR IGNORE INTO categories (id, name, description, color, is_system) VALUES (?, ?, ?, ?, 1)");
+      const tx = this.db.transaction(() => {
+        for (const cat of SYSTEM_CATEGORIES) {
+          insert.run(generateId(), cat.name, cat.description, cat.color);
+        }
+      });
+      tx();
+    }
+  }
+
   async create(input: CreateMemoryInput & { embedding?: number[] }): Promise<Memory> {
     const existing = this.db
       .prepare("SELECT id FROM memories WHERE key = ? AND project_id IS ?")

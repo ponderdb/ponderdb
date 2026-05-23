@@ -60,6 +60,21 @@ async function main() {
   }
   await store.init();
 
+  // Database management commands
+  if (mode === "db:reset") {
+    console.log("Resetting database — dropping all tables and recreating...");
+    await store.reset();
+    console.log("Database reset complete. All tables recreated with default data.");
+    process.exit(0);
+  }
+
+  if (mode === "db:seed") {
+    console.log("Seeding default data...");
+    await store.seed();
+    console.log("Seed complete — local user + system categories created.");
+    process.exit(0);
+  }
+
   if (mode === "mcp") {
     // MCP stdio mode — used by Claude, Cursor, Copilot, etc.
     // No auth needed — stdio is process-local, only the parent can talk to it.
