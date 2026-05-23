@@ -231,6 +231,63 @@ export interface MemoryVersion {
   changedBy?: string;
 }
 
+/** Audit log entry */
+export interface AuditLogEntry {
+  id: string;
+  userId: string;
+  action: AuditAction;
+  resourceType: "memory" | "project" | "category" | "team" | "api_key" | "user";
+  resourceId: string;
+  details: Record<string, unknown>;
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: Date;
+}
+
+export type AuditAction =
+  | "create" | "update" | "delete"
+  | "login" | "logout"
+  | "api_key_create" | "api_key_revoke"
+  | "team_create" | "team_delete" | "member_add" | "member_remove"
+  | "import" | "sync_push" | "sync_pull"
+  | "restore_version";
+
+/** Memory marketplace listing */
+export interface MarketplaceListing {
+  id: string;
+  memoryId: string;
+  title: string;
+  description: string;
+  category: string;
+  tags: string[];
+  authorId: string;
+  authorName: string;
+  downloads: number;
+  rating: number;
+  isPublic: boolean;
+  publishedAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateMarketplaceListingInput {
+  memoryId: string;
+  title: string;
+  description: string;
+  isPublic?: boolean;
+}
+
+/** AI suggestion */
+export interface AiSuggestion {
+  id: string;
+  type: "related_memory" | "missing_knowledge" | "stale_memory" | "duplicate";
+  title: string;
+  description: string;
+  relatedMemoryIds: string[];
+  confidence: number;
+  dismissed: boolean;
+  createdAt: Date;
+}
+
 /** Sync types */
 export interface SyncManifest {
   memories: SyncEntry[];

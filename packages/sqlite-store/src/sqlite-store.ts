@@ -26,6 +26,11 @@ import type {
   TeamRole,
   CreateTeamInput,
   MemoryVersion,
+  AuditLogEntry,
+  AuditAction,
+  MarketplaceListing,
+  CreateMarketplaceListingInput,
+  AiSuggestion,
 } from "@ponderdb/core";
 import {
   generateId,
@@ -239,6 +244,50 @@ export class SqliteStore implements StorageAdapter {
         changed_by TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_memory_history_memory ON memory_history(memory_id);
+
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        resource_type TEXT NOT NULL,
+        resource_id TEXT NOT NULL,
+        details TEXT NOT NULL DEFAULT '{}',
+        ip_address TEXT,
+        user_agent TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at);
+
+      CREATE TABLE IF NOT EXISTS marketplace_listings (
+        id TEXT PRIMARY KEY,
+        memory_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        category TEXT NOT NULL DEFAULT 'custom',
+        tags TEXT NOT NULL DEFAULT '[]',
+        author_id TEXT NOT NULL,
+        author_name TEXT NOT NULL,
+        downloads INTEGER NOT NULL DEFAULT 0,
+        rating REAL NOT NULL DEFAULT 0,
+        is_public INTEGER NOT NULL DEFAULT 1,
+        published_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_marketplace_category ON marketplace_listings(category);
+
+      CREATE TABLE IF NOT EXISTS ai_suggestions (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        related_memory_ids TEXT NOT NULL DEFAULT '[]',
+        confidence REAL NOT NULL DEFAULT 0,
+        dismissed INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_suggestions_user ON ai_suggestions(user_id);
     `);
 
     // Migration: add user_id to projects if missing
@@ -1098,6 +1147,136 @@ export class SqliteStore implements StorageAdapter {
     });
 
     tx();
+  }
+
+  // ── Audit Logs ──
+
+  async createAuditLog(entry: Omit<AuditLogEntry, "id" | "createdAt">): Promise<AuditLogEntry> {
+    const id = generateId();
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      INSERT INTO audit_logs (id, user_id, action, resource_type, resource_id, details, ip_address, user_agent, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, entry.userId, entry.action, entry.resourceType, entry.resourceId,
+      JSON.stringify(entry.details), entry.ipAddress ?? null, entry.userAgent ?? null, now);
+    return { ...entry, id, createdAt: new Date(now) };
+  }
+
+  async listAuditLogs(filter: {
+    userId?: string; action?: AuditAction; resourceType?: string; limit?: number; offset?: number;
+  }): Promise<{ items: AuditLogEntry[]; total: number }> {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    if (filter.userId) { conditions.push("user_id = ?"); params.push(filter.userId); }
+    if (filter.action) { conditions.push("action = ?"); params.push(filter.action); }
+    if (filter.resourceType) { conditions.push("resource_type = ?"); params.push(filter.resourceType); }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limit = filter.limit ?? 50;
+    const offset = filter.offset ?? 0;
+
+    const total = (this.db.prepare(`SELECT COUNT(*) as count FROM audit_logs ${where}`).get(...params) as { count: number }).count;
+    const rows = this.db.prepare(
+      `SELECT * FROM audit_logs ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+    ).all(...params, limit, offset) as Record<string, unknown>[];
+
+    return {
+      total,
+      items: rows.map((r) => ({
+        id: r.id as string, userId: r.user_id as string,
+        action: r.action as AuditAction, resourceType: r.resource_type as AuditLogEntry["resourceType"],
+        resourceId: r.resource_id as string, details: JSON.parse(r.details as string),
+        ipAddress: (r.ip_address as string) ?? undefined, userAgent: (r.user_agent as string) ?? undefined,
+        createdAt: new Date(r.created_at as string),
+      })),
+    };
+  }
+
+  // ── Marketplace ──
+
+  async createMarketplaceListing(
+    input: CreateMarketplaceListingInput & { authorId: string; authorName: string }
+  ): Promise<MarketplaceListing> {
+    const id = generateId();
+    const memory = await this.getById(input.memoryId);
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      INSERT INTO marketplace_listings (id, memory_id, title, description, category, tags, author_id, author_name, is_public, published_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.memoryId, input.title, input.description,
+      memory?.category ?? "custom", JSON.stringify(memory?.tags ?? []),
+      input.authorId, input.authorName, input.isPublic !== false ? 1 : 0, now, now);
+    return (await this.getMarketplaceListing(id))!;
+  }
+
+  async listMarketplaceListings(filter?: {
+    category?: string; search?: string; limit?: number; offset?: number;
+  }): Promise<{ items: MarketplaceListing[]; total: number }> {
+    const conditions: string[] = ["is_public = 1"];
+    const params: unknown[] = [];
+    if (filter?.category) { conditions.push("category = ?"); params.push(filter.category); }
+    if (filter?.search) { conditions.push("(title LIKE ? OR description LIKE ?)"); params.push(`%${filter.search}%`, `%${filter.search}%`); }
+    const where = `WHERE ${conditions.join(" AND ")}`;
+    const limit = filter?.limit ?? 50;
+    const offset = filter?.offset ?? 0;
+
+    const total = (this.db.prepare(`SELECT COUNT(*) as count FROM marketplace_listings ${where}`).get(...params) as { count: number }).count;
+    const rows = this.db.prepare(
+      `SELECT * FROM marketplace_listings ${where} ORDER BY downloads DESC LIMIT ? OFFSET ?`
+    ).all(...params, limit, offset) as Record<string, unknown>[];
+
+    return { total, items: rows.map((r) => this.rowToListing(r)) };
+  }
+
+  async getMarketplaceListing(id: string): Promise<MarketplaceListing | null> {
+    const row = this.db.prepare("SELECT * FROM marketplace_listings WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+    return row ? this.rowToListing(row) : null;
+  }
+
+  async recordMarketplaceDownload(id: string): Promise<void> {
+    this.db.prepare("UPDATE marketplace_listings SET downloads = downloads + 1 WHERE id = ?").run(id);
+  }
+
+  private rowToListing(r: Record<string, unknown>): MarketplaceListing {
+    return {
+      id: r.id as string, memoryId: r.memory_id as string,
+      title: r.title as string, description: r.description as string,
+      category: r.category as string, tags: JSON.parse(r.tags as string),
+      authorId: r.author_id as string, authorName: r.author_name as string,
+      downloads: r.downloads as number, rating: r.rating as number,
+      isPublic: r.is_public === 1,
+      publishedAt: new Date(r.published_at as string), updatedAt: new Date(r.updated_at as string),
+    };
+  }
+
+  // ── AI Suggestions ──
+
+  async createAiSuggestion(suggestion: Omit<AiSuggestion, "id" | "createdAt" | "dismissed"> & { userId?: string }): Promise<AiSuggestion> {
+    const id = generateId();
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      INSERT INTO ai_suggestions (id, user_id, type, title, description, related_memory_ids, confidence, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, (suggestion as Record<string, unknown>).userId ?? "local", suggestion.type, suggestion.title,
+      suggestion.description, JSON.stringify(suggestion.relatedMemoryIds), suggestion.confidence, now);
+    return { ...suggestion, id, dismissed: false, createdAt: new Date(now) };
+  }
+
+  async listAiSuggestions(userId: string): Promise<AiSuggestion[]> {
+    const rows = this.db.prepare(
+      "SELECT * FROM ai_suggestions WHERE user_id = ? AND dismissed = 0 ORDER BY confidence DESC"
+    ).all(userId) as Record<string, unknown>[];
+    return rows.map((r) => ({
+      id: r.id as string, type: r.type as AiSuggestion["type"],
+      title: r.title as string, description: r.description as string,
+      relatedMemoryIds: JSON.parse(r.related_memory_ids as string),
+      confidence: r.confidence as number, dismissed: r.dismissed === 1,
+      createdAt: new Date(r.created_at as string),
+    }));
+  }
+
+  async dismissAiSuggestion(id: string): Promise<boolean> {
+    const result = this.db.prepare("UPDATE ai_suggestions SET dismissed = 1 WHERE id = ?").run(id);
+    return result.changes > 0;
   }
 
   private rowToMemory(row: SqliteRow): Memory {
