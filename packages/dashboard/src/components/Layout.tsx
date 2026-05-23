@@ -9,7 +9,6 @@ interface LayoutProps {
   view: View;
   onViewChange: (v: View) => void;
   apiKey: string;
-  onApiKeyChange: (key: string) => void;
   healthy: boolean;
   projects: ProjectInfo[];
   projectId: string;
@@ -113,7 +112,7 @@ function ProjectDropdown({
   );
 }
 
-export function Layout({ children, view, onViewChange, apiKey, onApiKeyChange, healthy, projects, projectId, onProjectChange }: LayoutProps) {
+export function Layout({ children, view, onViewChange, apiKey, healthy, projects, projectId, onProjectChange }: LayoutProps) {
   return (
     <div className="layout">
       <aside className="sidebar">

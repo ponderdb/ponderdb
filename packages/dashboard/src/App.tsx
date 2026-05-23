@@ -138,7 +138,7 @@ export function App() {
         view="projects"
         onViewChange={handleViewChange}
         apiKey={apiKey}
-        onApiKeyChange={setApiKey}
+
         healthy={true}
         projects={projects}
         projectId={projectId}
