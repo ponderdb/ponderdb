@@ -22,6 +22,11 @@ import type {
   TeamMember,
   TeamRole,
   CreateTeamInput,
+  AuditLogEntry,
+  AuditAction,
+  MarketplaceListing,
+  CreateMarketplaceListingInput,
+  AiSuggestion,
 } from "./types.js";
 
 /** Storage backend interface — implemented by sqlite-store, pg-store, etc. */
@@ -183,6 +188,50 @@ export interface StorageAdapter {
     deletedProjectIds: string[];
     deletedCategoryIds: string[];
   }): Promise<void>;
+
+  // ── Audit Logs ──
+
+  /** Record an audit log entry */
+  createAuditLog(entry: Omit<AuditLogEntry, "id" | "createdAt">): Promise<AuditLogEntry>;
+
+  /** Query audit logs */
+  listAuditLogs(filter: {
+    userId?: string;
+    action?: AuditAction;
+    resourceType?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ items: AuditLogEntry[]; total: number }>;
+
+  // ── Marketplace ──
+
+  /** Publish a memory to the marketplace */
+  createMarketplaceListing(input: CreateMarketplaceListingInput & { authorId: string; authorName: string }): Promise<MarketplaceListing>;
+
+  /** List marketplace listings */
+  listMarketplaceListings(filter?: {
+    category?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ items: MarketplaceListing[]; total: number }>;
+
+  /** Get a marketplace listing by ID */
+  getMarketplaceListing(id: string): Promise<MarketplaceListing | null>;
+
+  /** Increment download count */
+  recordMarketplaceDownload(id: string): Promise<void>;
+
+  // ── AI Suggestions ──
+
+  /** Create an AI suggestion */
+  createAiSuggestion(suggestion: Omit<AiSuggestion, "id" | "createdAt" | "dismissed">): Promise<AiSuggestion>;
+
+  /** List suggestions for a user */
+  listAiSuggestions(userId: string): Promise<AiSuggestion[]>;
+
+  /** Dismiss a suggestion */
+  dismissAiSuggestion(id: string): Promise<boolean>;
 }
 
 /** Embedding provider interface */

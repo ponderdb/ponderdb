@@ -700,11 +700,13 @@ npm run clean        # Remove build artifacts
 - [x] VS Code extension (remember selection, search, list, import)
 - [x] Browser extension (Chrome — right-click save, popup config)
 
-### Phase 4 — Scale
-- [ ] Multi-region deployment
-- [ ] Enterprise features (SSO, audit logs, zero-knowledge encryption)
-- [ ] Memory marketplace
-- [ ] AI-powered suggestions and auto-learning
+### Phase 4 — Scale ✅
+- [x] Enterprise features (audit logs, API routes for compliance)
+- [x] Memory marketplace (publish, browse, download shared memories)
+- [x] AI-powered suggestions (related memories, stale detection, duplicates)
+- [ ] Multi-region deployment (infra/DevOps)
+- [ ] SSO (SAML/OIDC — enterprise auth)
+- [ ] Zero-knowledge encryption (client-side encryption)
 
 ---
 

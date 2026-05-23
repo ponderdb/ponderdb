@@ -20,6 +20,11 @@ import type {
   CreateUserInput,
   UpdateUserInput,
   MemoryVersion,
+  AuditLogEntry,
+  AuditAction,
+  MarketplaceListing,
+  CreateMarketplaceListingInput,
+  AiSuggestion,
   Team,
   TeamMember,
   TeamRole,
@@ -179,6 +184,56 @@ export class PgStore implements StorageAdapter {
         )
       `);
       await client.query("CREATE INDEX IF NOT EXISTS idx_memory_history_memory ON memory_history(memory_id)");
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS audit_logs (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          action TEXT NOT NULL,
+          resource_type TEXT NOT NULL,
+          resource_id TEXT NOT NULL,
+          details JSONB NOT NULL DEFAULT '{}',
+          ip_address TEXT,
+          user_agent TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)");
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS marketplace_listings (
+          id TEXT PRIMARY KEY,
+          memory_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          category TEXT NOT NULL DEFAULT 'custom',
+          tags JSONB NOT NULL DEFAULT '[]',
+          author_id TEXT NOT NULL,
+          author_name TEXT NOT NULL,
+          downloads INTEGER NOT NULL DEFAULT 0,
+          rating REAL NOT NULL DEFAULT 0,
+          is_public BOOLEAN NOT NULL DEFAULT TRUE,
+          published_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_marketplace_category ON marketplace_listings(category)");
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS ai_suggestions (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          type TEXT NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          related_memory_ids JSONB NOT NULL DEFAULT '[]',
+          confidence REAL NOT NULL DEFAULT 0,
+          dismissed BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_suggestions_user ON ai_suggestions(user_id)");
 
       // Seed default local user
       await client.query(
@@ -873,6 +928,143 @@ export class PgStore implements StorageAdapter {
     } finally {
       client.release();
     }
+  }
+
+  // ── Audit Logs ──
+
+  async createAuditLog(entry: Omit<AuditLogEntry, "id" | "createdAt">): Promise<AuditLogEntry> {
+    const id = generateId();
+    const { rows } = await this.pool.query(
+      `INSERT INTO audit_logs (id, user_id, action, resource_type, resource_id, details, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [id, entry.userId, entry.action, entry.resourceType, entry.resourceId,
+       JSON.stringify(entry.details), entry.ipAddress ?? null, entry.userAgent ?? null]
+    );
+    const r = rows[0];
+    return { ...entry, id, createdAt: new Date(r.created_at) };
+  }
+
+  async listAuditLogs(filter: {
+    userId?: string; action?: AuditAction; resourceType?: string; limit?: number; offset?: number;
+  }): Promise<{ items: AuditLogEntry[]; total: number }> {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    let idx = 1;
+    if (filter.userId) { conditions.push(`user_id = $${idx++}`); params.push(filter.userId); }
+    if (filter.action) { conditions.push(`action = $${idx++}`); params.push(filter.action); }
+    if (filter.resourceType) { conditions.push(`resource_type = $${idx++}`); params.push(filter.resourceType); }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limit = filter.limit ?? 50;
+    const offset = filter.offset ?? 0;
+
+    const countResult = await this.pool.query(`SELECT COUNT(*) as count FROM audit_logs ${where}`, params);
+    const total = Number(countResult.rows[0].count);
+    const { rows } = await this.pool.query(
+      `SELECT * FROM audit_logs ${where} ORDER BY created_at DESC LIMIT $${idx++} OFFSET $${idx}`,
+      [...params, limit, offset]
+    );
+
+    return {
+      total,
+      items: rows.map((r) => ({
+        id: r.id as string, userId: r.user_id as string,
+        action: r.action as AuditAction, resourceType: r.resource_type as AuditLogEntry["resourceType"],
+        resourceId: r.resource_id as string, details: r.details as Record<string, unknown>,
+        ipAddress: (r.ip_address as string) ?? undefined, userAgent: (r.user_agent as string) ?? undefined,
+        createdAt: new Date(r.created_at as string),
+      })),
+    };
+  }
+
+  // ── Marketplace ──
+
+  async createMarketplaceListing(
+    input: CreateMarketplaceListingInput & { authorId: string; authorName: string }
+  ): Promise<MarketplaceListing> {
+    const id = generateId();
+    const memory = await this.getById(input.memoryId);
+    const { rows } = await this.pool.query(
+      `INSERT INTO marketplace_listings (id, memory_id, title, description, category, tags, author_id, author_name, is_public)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [id, input.memoryId, input.title, input.description,
+       memory?.category ?? "custom", JSON.stringify(memory?.tags ?? []),
+       input.authorId, input.authorName, input.isPublic !== false]
+    );
+    return this.rowToListing(rows[0]);
+  }
+
+  async listMarketplaceListings(filter?: {
+    category?: string; search?: string; limit?: number; offset?: number;
+  }): Promise<{ items: MarketplaceListing[]; total: number }> {
+    const conditions: string[] = ["is_public = TRUE"];
+    const params: unknown[] = [];
+    let idx = 1;
+    if (filter?.category) { conditions.push(`category = $${idx++}`); params.push(filter.category); }
+    if (filter?.search) { conditions.push(`(title ILIKE $${idx} OR description ILIKE $${idx++})`); params.push(`%${filter.search}%`); }
+    const where = `WHERE ${conditions.join(" AND ")}`;
+    const limit = filter?.limit ?? 50;
+    const offset = filter?.offset ?? 0;
+
+    const countResult = await this.pool.query(`SELECT COUNT(*) as count FROM marketplace_listings ${where}`, params);
+    const total = Number(countResult.rows[0].count);
+    const { rows } = await this.pool.query(
+      `SELECT * FROM marketplace_listings ${where} ORDER BY downloads DESC LIMIT $${idx++} OFFSET $${idx}`,
+      [...params, limit, offset]
+    );
+    return { total, items: rows.map((r) => this.rowToListing(r)) };
+  }
+
+  async getMarketplaceListing(id: string): Promise<MarketplaceListing | null> {
+    const { rows } = await this.pool.query("SELECT * FROM marketplace_listings WHERE id = $1", [id]);
+    return rows.length > 0 ? this.rowToListing(rows[0]) : null;
+  }
+
+  async recordMarketplaceDownload(id: string): Promise<void> {
+    await this.pool.query("UPDATE marketplace_listings SET downloads = downloads + 1 WHERE id = $1", [id]);
+  }
+
+  private rowToListing(r: Record<string, unknown>): MarketplaceListing {
+    return {
+      id: r.id as string, memoryId: r.memory_id as string,
+      title: r.title as string, description: r.description as string,
+      category: r.category as string, tags: (r.tags as string[]) ?? [],
+      authorId: r.author_id as string, authorName: r.author_name as string,
+      downloads: r.downloads as number, rating: r.rating as number,
+      isPublic: r.is_public as boolean,
+      publishedAt: new Date(r.published_at as string), updatedAt: new Date(r.updated_at as string),
+    };
+  }
+
+  // ── AI Suggestions ──
+
+  async createAiSuggestion(suggestion: Omit<AiSuggestion, "id" | "createdAt" | "dismissed"> & { userId?: string }): Promise<AiSuggestion> {
+    const id = generateId();
+    const { rows } = await this.pool.query(
+      `INSERT INTO ai_suggestions (id, user_id, type, title, description, related_memory_ids, confidence)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [id, (suggestion as Record<string, unknown>).userId ?? "local", suggestion.type, suggestion.title,
+       suggestion.description, JSON.stringify(suggestion.relatedMemoryIds), suggestion.confidence]
+    );
+    return { ...suggestion, id, dismissed: false, createdAt: new Date(rows[0].created_at) };
+  }
+
+  async listAiSuggestions(userId: string): Promise<AiSuggestion[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM ai_suggestions WHERE user_id = $1 AND dismissed = FALSE ORDER BY confidence DESC",
+      [userId]
+    );
+    return rows.map((r) => ({
+      id: r.id as string, type: r.type as AiSuggestion["type"],
+      title: r.title as string, description: r.description as string,
+      relatedMemoryIds: (r.related_memory_ids as string[]) ?? [],
+      confidence: r.confidence as number, dismissed: r.dismissed as boolean,
+      createdAt: new Date(r.created_at as string),
+    }));
+  }
+
+  async dismissAiSuggestion(id: string): Promise<boolean> {
+    const result = await this.pool.query("UPDATE ai_suggestions SET dismissed = TRUE WHERE id = $1", [id]);
+    return (result.rowCount ?? 0) > 0;
   }
 
   // ── Row mappers ──
