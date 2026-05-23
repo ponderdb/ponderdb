@@ -60,9 +60,10 @@ export class PonderClient {
   }
 
   async search(query: SearchQuery): Promise<SearchResult[]> {
+    const body = { ...query, projectId: query.projectId ?? this.defaultProjectId };
     const res = await this.fetch<{ results: SearchResult[] }>("/api/memories/search", {
       method: "POST",
-      body: JSON.stringify(query),
+      body: JSON.stringify(body),
     });
     return res.results;
   }

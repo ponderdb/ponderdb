@@ -85,6 +85,7 @@ export function memoriesRouter(deps: AppDeps) {
       tags: body.tags,
       metadata: body.metadata,
       projectId: body.projectId,
+      isGlobal: body.isGlobal,
       embedding,
     });
 

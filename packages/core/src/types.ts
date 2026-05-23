@@ -18,6 +18,7 @@ export interface Memory {
   metadata: Record<string, unknown>;
   embedding?: number[];
   projectId?: string;
+  isGlobal: boolean;
   createdAt: Date;
   updatedAt: Date;
   accessedAt: Date;
@@ -35,6 +36,7 @@ export interface CreateMemoryInput {
   tags?: string[];
   metadata?: Record<string, unknown>;
   projectId?: string;
+  isGlobal?: boolean;
 }
 
 /** Input for updating a memory */
@@ -44,6 +46,7 @@ export interface UpdateMemoryInput {
   importance?: MemoryImportance;
   tags?: string[];
   metadata?: Record<string, unknown>;
+  isGlobal?: boolean;
 }
 
 /** Search query */

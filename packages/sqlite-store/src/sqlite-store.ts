@@ -40,6 +40,7 @@ interface SqliteRow {
   metadata: string;
   embedding: Buffer | null;
   project_id: string | null;
+  is_global: number;
   created_at: string;
   updated_at: string;
   accessed_at: string;
@@ -104,6 +105,7 @@ export class SqliteStore implements StorageAdapter {
         metadata TEXT NOT NULL DEFAULT '{}',
         embedding BLOB,
         project_id TEXT,
+        is_global INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now')),
         accessed_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -123,6 +125,11 @@ export class SqliteStore implements StorageAdapter {
     const cols = this.db.prepare("PRAGMA table_info(memories)").all() as { name: string }[];
     if (!cols.some((c) => c.name === "token_count")) {
       this.db.exec("ALTER TABLE memories ADD COLUMN token_count INTEGER NOT NULL DEFAULT 0");
+    }
+
+    // Migration: add is_global column if missing (existing DBs)
+    if (!cols.some((c) => c.name === "is_global")) {
+      this.db.exec("ALTER TABLE memories ADD COLUMN is_global INTEGER NOT NULL DEFAULT 0");
     }
 
     // Backfill token_count for any rows that are 0
@@ -230,8 +237,8 @@ export class SqliteStore implements StorageAdapter {
     const tokenCount = estimateTokens(input.content);
 
     const insertMemory = this.db.prepare(`
-      INSERT INTO memories (id, key, content, category, importance, tags, metadata, embedding, project_id, token_count, created_at, updated_at, accessed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO memories (id, key, content, category, importance, tags, metadata, embedding, project_id, is_global, token_count, created_at, updated_at, accessed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertVec = this.db.prepare(`
@@ -243,7 +250,7 @@ export class SqliteStore implements StorageAdapter {
         id, input.key, input.content,
         input.category ?? "custom", input.importance ?? "medium",
         JSON.stringify(input.tags ?? []), JSON.stringify(input.metadata ?? {}),
-        embeddingBlob, input.projectId ?? null, tokenCount,
+        embeddingBlob, input.projectId ?? null, input.isGlobal ? 1 : 0, tokenCount,
         now, now, now,
       );
       if (embeddingBlob) {
@@ -299,6 +306,10 @@ export class SqliteStore implements StorageAdapter {
       sets.push("metadata = ?");
       params.push(JSON.stringify(input.metadata));
     }
+    if (input.isGlobal !== undefined) {
+      sets.push("is_global = ?");
+      params.push(input.isGlobal ? 1 : 0);
+    }
 
     let newEmbeddingBlob: Buffer | undefined;
     if (input.embedding !== undefined) {
@@ -345,7 +356,7 @@ export class SqliteStore implements StorageAdapter {
       params.push(filter.category);
     }
     if (filter.projectId) {
-      conditions.push("project_id = ?");
+      conditions.push("(project_id = ? OR is_global = 1)");
       params.push(filter.projectId);
     }
     if (filter.importance) {
@@ -416,7 +427,7 @@ export class SqliteStore implements StorageAdapter {
       if (!row) continue;
 
       if (filter?.category && row.category !== filter.category) continue;
-      if (filter?.projectId && row.project_id !== filter.projectId) continue;
+      if (filter?.projectId && row.project_id !== filter.projectId && row.is_global !== 1) continue;
 
       // Convert cosine distance to similarity score (distance 0 = perfect match = score 1)
       const score = 1 - vr.distance;
@@ -445,7 +456,7 @@ export class SqliteStore implements StorageAdapter {
       params.push(filter.category);
     }
     if (filter?.projectId) {
-      conditions.push("project_id = ?");
+      conditions.push("(project_id = ? OR is_global = 1)");
       params.push(filter.projectId);
     }
 
@@ -464,7 +475,7 @@ export class SqliteStore implements StorageAdapter {
   async count(filter?: { projectId?: string }): Promise<number> {
     if (filter?.projectId) {
       return (
-        this.db.prepare("SELECT COUNT(*) as count FROM memories WHERE project_id = ?").get(filter.projectId) as { count: number }
+        this.db.prepare("SELECT COUNT(*) as count FROM memories WHERE project_id = ? OR is_global = 1").get(filter.projectId) as { count: number }
       ).count;
     }
     return (this.db.prepare("SELECT COUNT(*) as count FROM memories").get() as { count: number }).count;
@@ -693,6 +704,7 @@ export class SqliteStore implements StorageAdapter {
       tags: JSON.parse(row.tags),
       metadata: JSON.parse(row.metadata),
       projectId: row.project_id ?? undefined,
+      isGlobal: row.is_global === 1,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
       accessedAt: new Date(row.accessed_at),
