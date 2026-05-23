@@ -129,12 +129,16 @@ export class PgStore implements StorageAdapter {
           name TEXT NOT NULL,
           key_hash TEXT NOT NULL UNIQUE,
           prefix TEXT NOT NULL,
+          raw_key TEXT,
           user_id TEXT NOT NULL DEFAULT 'local',
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           last_used_at TIMESTAMPTZ,
           expires_at TIMESTAMPTZ
         )
       `);
+
+      // Migration: add raw_key if missing
+      await client.query("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS raw_key TEXT");
 
       await client.query(`
         CREATE TABLE IF NOT EXISTS categories (
@@ -554,8 +558,8 @@ export class PgStore implements StorageAdapter {
     const id = generateId();
 
     const { rows } = await this.pool.query(
-      "INSERT INTO api_keys (id, name, key_hash, prefix, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-      [id, name, hash, prefix, userId]
+      "INSERT INTO api_keys (id, name, key_hash, prefix, raw_key, user_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+      [id, name, hash, prefix, rawKey, userId]
     );
 
     return {
@@ -580,7 +584,7 @@ export class PgStore implements StorageAdapter {
     const { rows } = await this.pool.query(
       "SELECT * FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC", [userId]
     );
-    return rows.map((r) => ({ ...this.rowToApiKey(r), keyHash: "[hidden]" }));
+    return rows.map((r) => this.rowToApiKey(r));
   }
 
   async deleteApiKey(id: string): Promise<boolean> {
@@ -1109,6 +1113,7 @@ export class PgStore implements StorageAdapter {
       name: row.name as string,
       keyHash: row.key_hash as string,
       prefix: row.prefix as string,
+      rawKey: (row.raw_key as string) ?? undefined,
       userId: row.user_id as string,
       createdAt: new Date(row.created_at as string),
       lastUsedAt: row.last_used_at ? new Date(row.last_used_at as string) : undefined,
