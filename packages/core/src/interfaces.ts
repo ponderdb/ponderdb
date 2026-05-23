@@ -37,6 +37,12 @@ export interface StorageAdapter {
   /** Close storage connection */
   close(): Promise<void>;
 
+  /** Drop all tables and recreate schema (destructive) */
+  reset(): Promise<void>;
+
+  /** Seed default data (local user, system categories) */
+  seed(): Promise<void>;
+
   /** Create a new memory */
   create(input: CreateMemoryInput & { embedding?: number[] }): Promise<Memory>;
 

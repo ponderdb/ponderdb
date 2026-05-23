@@ -277,6 +277,39 @@ export class PgStore implements StorageAdapter {
     await this.pool.end();
   }
 
+  async reset(): Promise<void> {
+    await this.pool.query(`
+      DROP TABLE IF EXISTS memory_history CASCADE;
+      DROP TABLE IF EXISTS ai_suggestions CASCADE;
+      DROP TABLE IF EXISTS marketplace_listings CASCADE;
+      DROP TABLE IF EXISTS audit_logs CASCADE;
+      DROP TABLE IF EXISTS team_members CASCADE;
+      DROP TABLE IF EXISTS teams CASCADE;
+      DROP TABLE IF EXISTS categories CASCADE;
+      DROP TABLE IF EXISTS api_keys CASCADE;
+      DROP TABLE IF EXISTS memories CASCADE;
+      DROP TABLE IF EXISTS projects CASCADE;
+      DROP TABLE IF EXISTS users CASCADE;
+    `);
+    await this.init();
+  }
+
+  async seed(): Promise<void> {
+    await this.pool.query(
+      "INSERT INTO users (id, email, name, provider) VALUES ('local', 'local@ponderdb.local', 'Local User', 'local') ON CONFLICT (id) DO NOTHING"
+    );
+
+    const { rows } = await this.pool.query("SELECT COUNT(*) as count FROM categories WHERE is_system = TRUE");
+    if (Number(rows[0].count) === 0) {
+      for (const cat of SYSTEM_CATEGORIES) {
+        await this.pool.query(
+          "INSERT INTO categories (id, name, description, color, is_system) VALUES ($1, $2, $3, $4, TRUE) ON CONFLICT DO NOTHING",
+          [generateId(), cat.name, cat.description, cat.color]
+        );
+      }
+    }
+  }
+
   // ── Memory CRUD ──
 
   async create(input: CreateMemoryInput & { embedding?: number[] }): Promise<Memory> {
