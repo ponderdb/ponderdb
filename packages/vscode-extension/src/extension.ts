@@ -1,5 +1,20 @@
 import * as vscode from "vscode";
 
+interface PonderMemory {
+  id: string;
+  key: string;
+  content: string;
+  category: string;
+  importance: string;
+  tags: string[];
+  updatedAt: string;
+}
+
+interface PonderSearchResult {
+  memory: PonderMemory;
+  score: number;
+}
+
 interface PonderConfig {
   serverUrl: string;
   apiKey: string;
@@ -15,7 +30,7 @@ function getConfig(): PonderConfig {
   };
 }
 
-async function ponderFetch(path: string, options: RequestInit = {}): Promise<any> {
+async function ponderFetch(path: string, options: RequestInit = {}): Promise<Record<string, unknown> | null> {
   const config = getConfig();
   if (!config.apiKey) {
     vscode.window.showErrorMessage("PonderDB: Set your API key in Settings → PonderDB");
@@ -33,7 +48,7 @@ async function ponderFetch(path: string, options: RequestInit = {}): Promise<any
   });
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as Record<string, any>;
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>;
     const msg = body?.error?.message || `HTTP ${res.status}`;
     vscode.window.showErrorMessage(`PonderDB: ${msg}`);
     return null;
@@ -62,7 +77,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!key) return;
 
       const config = getConfig();
-      const body: Record<string, any> = { key, content: selection };
+      const body: Record<string, unknown> = { key, content: selection };
       if (config.projectId) body.projectId = config.projectId;
 
       const result = await ponderFetch("/api/memories", {
@@ -86,7 +101,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!query) return;
 
       const config = getConfig();
-      const body: Record<string, any> = { query, limit: 10 };
+      const body: Record<string, unknown> = { query, limit: 10 };
       if (config.projectId) body.projectId = config.projectId;
 
       const result = await ponderFetch("/api/memories/search", {
@@ -99,7 +114,7 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const items = result.results.map((r: any) => ({
+      const items = (result.results as PonderSearchResult[]).map((r) => ({
         label: r.memory.key,
         description: `[${r.memory.category}] score: ${r.score.toFixed(2)}`,
         detail: r.memory.content.slice(0, 200),
@@ -135,7 +150,7 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      const items = result.items.map((m: any) => ({
+      const items = (result.items as PonderMemory[]).map((m) => ({
         label: m.key,
         description: `[${m.category}] ${m.importance}`,
         detail: m.content.slice(0, 150),
@@ -166,7 +181,7 @@ export function activate(context: vscode.ExtensionContext) {
       const content = editor.document.getText();
 
       const config = getConfig();
-      const body: Record<string, any> = { content, source: fileName.toLowerCase() };
+      const body: Record<string, unknown> = { content, source: fileName.toLowerCase() };
       if (config.projectId) body.projectId = config.projectId;
 
       const result = await ponderFetch("/api/import", {

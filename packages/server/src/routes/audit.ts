@@ -12,7 +12,13 @@ export function auditRouter(deps: AppDeps) {
     const limit = c.req.query("limit") ? Number(c.req.query("limit")) : undefined;
     const offset = c.req.query("offset") ? Number(c.req.query("offset")) : undefined;
 
-    const result = await store.listAuditLogs({ userId, action: action as any, resourceType, limit, offset });
+    const result = await store.listAuditLogs({
+      userId,
+      action: action as import("@ponderdb/core").AuditAction | undefined,
+      resourceType,
+      limit,
+      offset,
+    });
     return c.json(result);
   });
 
