@@ -139,7 +139,7 @@ export function App() {
   }, [projectId]);
 
   const handleLogout = useCallback(async () => {
-    try { await fetch("/auth/logout", { method: "POST" }); } catch {}
+    try { await fetch("/auth/logout", { method: "POST" }); } catch { /* ignore */ }
     setUser(null);
     setApiKey("");
     setProjectId("");
