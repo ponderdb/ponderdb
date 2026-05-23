@@ -8,8 +8,9 @@ export interface OAuthConfig {
     clientId: string;
     clientSecret: string;
   };
-  /** Base URL for callbacks (e.g. http://localhost:7437) */
   baseUrl: string;
+  googleCallbackUrl: string;
+  githubCallbackUrl: string;
 }
 
 export interface OAuthUserInfo {
@@ -20,6 +21,7 @@ export interface OAuthUserInfo {
 }
 
 export function getOAuthConfig(): OAuthConfig {
+  const baseUrl = process.env.PONDER_BASE_URL || `http://${process.env.PONDER_HOST || "127.0.0.1"}:${process.env.PONDER_PORT || "7437"}`;
   return {
     google: process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
       ? { clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET }
@@ -27,7 +29,9 @@ export function getOAuthConfig(): OAuthConfig {
     github: process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
       ? { clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET }
       : undefined,
-    baseUrl: process.env.PONDER_BASE_URL || `http://${process.env.PONDER_HOST || "127.0.0.1"}:${process.env.PONDER_PORT || "7437"}`,
+    baseUrl,
+    googleCallbackUrl: process.env.GOOGLE_CALLBACK_URL || `${baseUrl}/auth/google/callback`,
+    githubCallbackUrl: process.env.GITHUB_CALLBACK_URL || `${baseUrl}/auth/github/callback`,
   };
 }
 
@@ -36,7 +40,7 @@ export function getOAuthConfig(): OAuthConfig {
 export function googleAuthUrl(config: OAuthConfig): string {
   const params = new URLSearchParams({
     client_id: config.google!.clientId,
-    redirect_uri: `${config.baseUrl}/auth/google/callback`,
+    redirect_uri: config.googleCallbackUrl,
     response_type: "code",
     scope: "openid email profile",
     access_type: "offline",
@@ -54,7 +58,7 @@ export async function exchangeGoogleCode(code: string, config: OAuthConfig): Pro
       code,
       client_id: config.google!.clientId,
       client_secret: config.google!.clientSecret,
-      redirect_uri: `${config.baseUrl}/auth/google/callback`,
+      redirect_uri: config.googleCallbackUrl,
       grant_type: "authorization_code",
     }),
   });
@@ -88,7 +92,7 @@ export async function exchangeGoogleCode(code: string, config: OAuthConfig): Pro
 export function githubAuthUrl(config: OAuthConfig): string {
   const params = new URLSearchParams({
     client_id: config.github!.clientId,
-    redirect_uri: `${config.baseUrl}/auth/github/callback`,
+    redirect_uri: config.githubCallbackUrl,
     scope: "user:email",
   });
   return `https://github.com/login/oauth/authorize?${params}`;

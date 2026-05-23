@@ -90,6 +90,14 @@ export function App() {
     localStorage.setItem("ponderdb_project", projectId);
   }, [projectId]);
 
+  const handleLogout = useCallback(() => {
+    setApiKey("");
+    setProjectId("");
+    setProjects([]);
+    localStorage.removeItem("ponderdb_api_key");
+    localStorage.removeItem("ponderdb_project");
+  }, []);
+
   const loadProjects = useCallback(() => {
     if (!apiKey) { setProjects([]); return; }
     listProjects(apiKey)
@@ -102,8 +110,14 @@ export function App() {
           }
         }
       })
-      .catch(() => setProjects([]));
-  }, [apiKey, projectId]);
+      .catch((e) => {
+        // If 401, API key is invalid — clear it and show setup
+        if (e.message?.includes("401")) {
+          handleLogout();
+        }
+        setProjects([]);
+      });
+  }, [apiKey, projectId, handleLogout]);
 
   useEffect(() => { loadProjects(); }, [loadProjects]);
 
@@ -138,11 +152,11 @@ export function App() {
         view="projects"
         onViewChange={handleViewChange}
         apiKey={apiKey}
-
         healthy={true}
         projects={projects}
         projectId={projectId}
         onProjectChange={setProjectId}
+        onLogout={handleLogout}
       >
         <Projects apiKey={apiKey} currentProjectId={projectId} onProjectsChanged={loadProjects} />
       </Layout>
@@ -154,11 +168,11 @@ export function App() {
       view={view}
       onViewChange={handleViewChange}
       apiKey={apiKey}
-      onApiKeyChange={setApiKey}
       healthy={true}
       projects={projects}
       projectId={projectId}
       onProjectChange={setProjectId}
+      onLogout={handleLogout}
     >
       {view === "dashboard" && <Dashboard apiKey={apiKey} projectId={projectId} onSelectMemory={handleSelectMemory} />}
       {view === "memories" && (
