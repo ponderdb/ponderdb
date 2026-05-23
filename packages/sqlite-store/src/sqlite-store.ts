@@ -790,6 +790,115 @@ export class SqliteStore implements StorageAdapter {
     };
   }
 
+  // ── Sync ──
+
+  async getChangesSince(since: string | null, userId: string): Promise<{
+    memories: Memory[];
+    projects: Project[];
+    categories: Category[];
+  }> {
+    const sinceDate = since || "1970-01-01T00:00:00.000Z";
+
+    // Get user's projects first to scope memories
+    const projects = this.db.prepare(
+      "SELECT * FROM projects WHERE user_id = ? AND updated_at > ?"
+    ).all(userId, sinceDate) as ProjectRow[];
+
+    const userProjectSlugs = this.db.prepare(
+      "SELECT slug FROM projects WHERE user_id = ?"
+    ).all(userId) as { slug: string }[];
+    const slugs = userProjectSlugs.map((p) => p.slug);
+
+    let memories: SqliteRow[] = [];
+    if (slugs.length > 0) {
+      const placeholders = slugs.map(() => "?").join(",");
+      memories = this.db.prepare(
+        `SELECT * FROM memories WHERE updated_at > ? AND (project_id IN (${placeholders}) OR is_global = 1)`
+      ).all(sinceDate, ...slugs) as SqliteRow[];
+    }
+
+    const categories = this.db.prepare(
+      "SELECT * FROM categories WHERE created_at > ? AND (project_id IS NULL OR project_id IN (SELECT slug FROM projects WHERE user_id = ?))"
+    ).all(sinceDate, userId) as CategoryRow[];
+
+    return {
+      memories: memories.map((r) => this.rowToMemory(r)),
+      projects: projects.map((r) => this.rowToProject(r)),
+      categories: categories.map((r) => this.rowToCategory(r)),
+    };
+  }
+
+  async applyRemoteChanges(changes: {
+    memories: Memory[];
+    projects: Project[];
+    categories: Category[];
+    deletedMemoryIds: string[];
+    deletedProjectIds: string[];
+    deletedCategoryIds: string[];
+  }): Promise<void> {
+    const tx = this.db.transaction(() => {
+      // Upsert projects
+      const upsertProject = this.db.prepare(`
+        INSERT INTO projects (id, name, slug, description, user_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET name=excluded.name, description=excluded.description, updated_at=excluded.updated_at
+      `);
+      for (const p of changes.projects) {
+        upsertProject.run(p.id, p.name, p.slug, p.description, p.userId, p.createdAt.toISOString(), p.updatedAt.toISOString());
+      }
+
+      // Upsert memories (without embeddings — those are re-generated locally)
+      const upsertMemory = this.db.prepare(`
+        INSERT INTO memories (id, key, content, category, importance, tags, metadata, project_id, is_global, token_count, created_at, updated_at, accessed_at, access_count, version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          content=excluded.content, category=excluded.category, importance=excluded.importance,
+          tags=excluded.tags, metadata=excluded.metadata, is_global=excluded.is_global,
+          token_count=excluded.token_count, updated_at=excluded.updated_at,
+          accessed_at=excluded.accessed_at, access_count=excluded.access_count, version=excluded.version
+      `);
+      for (const m of changes.memories) {
+        upsertMemory.run(
+          m.id, m.key, m.content, m.category, m.importance,
+          JSON.stringify(m.tags), JSON.stringify(m.metadata),
+          m.projectId ?? null, m.isGlobal ? 1 : 0, m.tokenCount,
+          m.createdAt.toISOString(), m.updatedAt.toISOString(),
+          m.accessedAt.toISOString(), m.accessCount, m.version,
+        );
+      }
+
+      // Upsert categories
+      const upsertCategory = this.db.prepare(`
+        INSERT INTO categories (id, name, description, color, icon, project_id, is_system, is_ai_generated, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET name=excluded.name, description=excluded.description, color=excluded.color, icon=excluded.icon
+      `);
+      for (const cat of changes.categories) {
+        upsertCategory.run(
+          cat.id, cat.name, cat.description, cat.color, cat.icon ?? null,
+          cat.projectId ?? null, cat.isSystem ? 1 : 0, cat.isAiGenerated ? 1 : 0,
+          cat.createdAt.toISOString(),
+        );
+      }
+
+      // Apply deletes
+      const delMemory = this.db.prepare("DELETE FROM memories WHERE id = ?");
+      const delVec = this.db.prepare("DELETE FROM vec_memories WHERE memory_id = ?");
+      for (const id of changes.deletedMemoryIds) {
+        delVec.run(id);
+        delMemory.run(id);
+      }
+
+      const delProject = this.db.prepare("DELETE FROM projects WHERE id = ?");
+      for (const id of changes.deletedProjectIds) { delProject.run(id); }
+
+      const delCategory = this.db.prepare("DELETE FROM categories WHERE id = ? AND is_system = 0");
+      for (const id of changes.deletedCategoryIds) { delCategory.run(id); }
+    });
+
+    tx();
+  }
+
   private rowToMemory(row: SqliteRow): Memory {
     return {
       id: row.id,

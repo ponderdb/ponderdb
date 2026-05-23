@@ -124,6 +124,25 @@ export interface StorageAdapter {
 
   /** Delete a project and all its memories */
   deleteProject(id: string): Promise<boolean>;
+
+  // ── Sync ──
+
+  /** Get changes since a given timestamp (for sync push) */
+  getChangesSince(since: string | null, userId: string): Promise<{
+    memories: Memory[];
+    projects: Project[];
+    categories: Category[];
+  }>;
+
+  /** Apply changes from remote (for sync pull — upsert) */
+  applyRemoteChanges(changes: {
+    memories: Memory[];
+    projects: Project[];
+    categories: Category[];
+    deletedMemoryIds: string[];
+    deletedProjectIds: string[];
+    deletedCategoryIds: string[];
+  }): Promise<void>;
 }
 
 /** Embedding provider interface */

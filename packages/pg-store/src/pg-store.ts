@@ -560,6 +560,114 @@ export class PgStore implements StorageAdapter {
     return true;
   }
 
+  // ── Sync ──
+
+  async getChangesSince(since: string | null, userId: string): Promise<{
+    memories: Memory[];
+    projects: Project[];
+    categories: Category[];
+  }> {
+    const sinceDate = since || "1970-01-01T00:00:00.000Z";
+
+    const { rows: projectRows } = await this.pool.query(
+      "SELECT * FROM projects WHERE user_id = $1 AND updated_at > $2", [userId, sinceDate]
+    );
+
+    const { rows: slugRows } = await this.pool.query(
+      "SELECT slug FROM projects WHERE user_id = $1", [userId]
+    );
+    const slugs = slugRows.map((r) => r.slug as string);
+
+    let memoryRows: Record<string, unknown>[] = [];
+    if (slugs.length > 0) {
+      const placeholders = slugs.map((_, i) => `$${i + 2}`).join(",");
+      const { rows } = await this.pool.query(
+        `SELECT * FROM memories WHERE updated_at > $1 AND (project_id IN (${placeholders}) OR is_global = TRUE)`,
+        [sinceDate, ...slugs]
+      );
+      memoryRows = rows;
+    }
+
+    const { rows: catRows } = await this.pool.query(
+      "SELECT * FROM categories WHERE created_at > $1 AND (project_id IS NULL OR project_id IN (SELECT slug FROM projects WHERE user_id = $2))",
+      [sinceDate, userId]
+    );
+
+    return {
+      memories: memoryRows.map((r) => this.rowToMemory(r)),
+      projects: projectRows.map((r) => this.rowToProject(r)),
+      categories: catRows.map((r) => this.rowToCategory(r)),
+    };
+  }
+
+  async applyRemoteChanges(changes: {
+    memories: Memory[];
+    projects: Project[];
+    categories: Category[];
+    deletedMemoryIds: string[];
+    deletedProjectIds: string[];
+    deletedCategoryIds: string[];
+  }): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      for (const p of changes.projects) {
+        await client.query(
+          `INSERT INTO projects (id, name, slug, description, user_id, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, description=EXCLUDED.description, updated_at=EXCLUDED.updated_at`,
+          [p.id, p.name, p.slug, p.description, p.userId, p.createdAt.toISOString(), p.updatedAt.toISOString()]
+        );
+      }
+
+      for (const m of changes.memories) {
+        await client.query(
+          `INSERT INTO memories (id, key, content, category, importance, tags, metadata, project_id, is_global, token_count, created_at, updated_at, accessed_at, access_count, version)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+           ON CONFLICT (id) DO UPDATE SET
+             content=EXCLUDED.content, category=EXCLUDED.category, importance=EXCLUDED.importance,
+             tags=EXCLUDED.tags, metadata=EXCLUDED.metadata, is_global=EXCLUDED.is_global,
+             token_count=EXCLUDED.token_count, updated_at=EXCLUDED.updated_at,
+             accessed_at=EXCLUDED.accessed_at, access_count=EXCLUDED.access_count, version=EXCLUDED.version`,
+          [
+            m.id, m.key, m.content, m.category, m.importance,
+            JSON.stringify(m.tags), JSON.stringify(m.metadata),
+            m.projectId ?? null, m.isGlobal, m.tokenCount,
+            m.createdAt.toISOString(), m.updatedAt.toISOString(),
+            m.accessedAt.toISOString(), m.accessCount, m.version,
+          ]
+        );
+      }
+
+      for (const cat of changes.categories) {
+        await client.query(
+          `INSERT INTO categories (id, name, description, color, icon, project_id, is_system, is_ai_generated, created_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, description=EXCLUDED.description, color=EXCLUDED.color, icon=EXCLUDED.icon`,
+          [cat.id, cat.name, cat.description, cat.color, cat.icon ?? null, cat.projectId ?? null, cat.isSystem, cat.isAiGenerated, cat.createdAt.toISOString()]
+        );
+      }
+
+      for (const id of changes.deletedMemoryIds) {
+        await client.query("DELETE FROM memories WHERE id = $1", [id]);
+      }
+      for (const id of changes.deletedProjectIds) {
+        await client.query("DELETE FROM projects WHERE id = $1", [id]);
+      }
+      for (const id of changes.deletedCategoryIds) {
+        await client.query("DELETE FROM categories WHERE id = $1 AND is_system = FALSE", [id]);
+      }
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   // ── Row mappers ──
 
   private rowToMemory(row: Record<string, unknown>): Memory {

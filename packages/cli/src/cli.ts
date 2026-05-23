@@ -128,5 +128,27 @@ export function createCli() {
       console.log(`Server: ${stats.version}`);
     });
 
+  program
+    .command("sync")
+    .description("Sync memories with cloud server")
+    .option("--status", "Show sync status only")
+    .action(async (opts) => {
+      const client = getClient();
+
+      if (opts.status) {
+        const status = await client.syncStatus();
+        console.log(`Memories: ${status.totalMemories}`);
+        console.log(`Projects: ${status.totalProjects}`);
+        console.log(`Categories: ${status.totalCategories}`);
+        return;
+      }
+
+      // Pull changes from cloud
+      console.log("Pulling from cloud...");
+      const pulled = await client.syncPull(null);
+      console.log(`  ${pulled.memories.length} memories, ${pulled.projects.length} projects`);
+      console.log(`Synced at: ${pulled.syncedAt}`);
+    });
+
   return program;
 }

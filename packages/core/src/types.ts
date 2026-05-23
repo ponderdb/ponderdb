@@ -189,6 +189,45 @@ export const SYSTEM_CATEGORIES: { name: string; description: string; color: stri
   { name: "custom", description: "Uncategorized memories", color: "#64748b" },
 ];
 
+/** Sync types */
+export interface SyncManifest {
+  memories: SyncEntry[];
+  projects: SyncEntry[];
+  categories: SyncEntry[];
+}
+
+export interface SyncEntry {
+  id: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
+export interface SyncPushRequest {
+  memories: Memory[];
+  projects: Project[];
+  categories: Category[];
+  deletedMemoryIds: string[];
+  deletedProjectIds: string[];
+  deletedCategoryIds: string[];
+  lastSyncAt: string | null;
+}
+
+export interface SyncPullResponse {
+  memories: Memory[];
+  projects: Project[];
+  categories: Category[];
+  deletedMemoryIds: string[];
+  deletedProjectIds: string[];
+  deletedCategoryIds: string[];
+  syncedAt: string;
+}
+
+export interface SyncStatus {
+  lastSyncAt: string | null;
+  pendingChanges: number;
+  connected: boolean;
+}
+
 /** Server config */
 export interface PonderConfig {
   port: number;
