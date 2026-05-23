@@ -5,7 +5,7 @@ export function Stats({ apiKey }: { apiKey: string }) {
   const [total, setTotal] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!apiKey) return;
+    /* proceed — auth handled by cookie or apiKey */
     listMemories(apiKey, { limit: 0 })
       .then((r) => setTotal(r.total))
       .catch(() => setTotal(null));

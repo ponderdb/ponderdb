@@ -123,7 +123,7 @@ export function Dashboard({ apiKey, projectId, onSelectMemory }: DashboardProps)
   const [categoryColors, setCategoryColors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (!apiKey) { setLoading(false); return; }
+    /* auth handled by cookie or apiKey */
     Promise.all([
       listMemories(apiKey, { limit: 500, sortBy: "updatedAt", sortOrder: "desc", projectId: projectId || undefined }),
       listCategories(apiKey, projectId || undefined),
@@ -144,7 +144,7 @@ export function Dashboard({ apiKey, projectId, onSelectMemory }: DashboardProps)
       });
   }, [apiKey, projectId]);
 
-  if (!apiKey) return <div className="empty"><p>Enter your API key in the sidebar</p></div>;
+  /* removed apiKey guard — auth handled by session */
   if (loading) return <div className="loading">Loading...</div>;
 
   const categoryMap = new Map<string, number>();

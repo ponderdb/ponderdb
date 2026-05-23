@@ -90,7 +90,7 @@ export function MemoryList({ apiKey, projectId, initialMemory, onMemoryConsumed 
   }, [initialMemory]);
 
   const load = useCallback(() => {
-    if (!apiKey) return;
+    /* auth handled by cookie or apiKey */
     setError("");
     listMemories(apiKey, {
       category: category || undefined,
@@ -122,13 +122,7 @@ export function MemoryList({ apiKey, projectId, initialMemory, onMemoryConsumed 
     }
   };
 
-  if (!apiKey) {
-    return (
-      <div className="empty">
-        <p>Enter your API key in the sidebar to view memories</p>
-      </div>
-    );
-  }
+  /* auth guard removed — session handles auth */
 
   if (selected) {
     return (
