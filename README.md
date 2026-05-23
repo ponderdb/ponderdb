@@ -686,8 +686,8 @@ npm run clean        # Remove build artifacts
 - [x] Multi-user data model (User type, `userId` scoping on projects + API keys)
 - [x] Auth middleware with user context extraction
 - [x] PostgreSQL + pgvector storage adapter (`@ponderdb/pg-store`)
-- [ ] Google + GitHub OAuth login
-- [ ] JWT session management for web dashboard
+- [x] Google + GitHub OAuth login
+- [x] JWT session management for web dashboard
 - [ ] Cloud sync (local <-> cloud)
 - [ ] Team/shared memories
 - [ ] Hosted service at ponderdb.dev
