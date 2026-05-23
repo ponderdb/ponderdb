@@ -67,10 +67,20 @@ export class PgStore implements StorageAdapter {
           id TEXT PRIMARY KEY,
           email TEXT NOT NULL UNIQUE,
           name TEXT NOT NULL,
+          provider TEXT NOT NULL DEFAULT 'local',
+          provider_id TEXT,
+          last_login_ip TEXT,
+          last_login_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `);
+
+      // Migration: add provider columns to users
+      await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'local'");
+      await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id TEXT");
+      await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_ip TEXT");
+      await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ");
 
       await client.query(`
         CREATE TABLE IF NOT EXISTS memories (
@@ -517,8 +527,8 @@ export class PgStore implements StorageAdapter {
   async createUser(input: CreateUserInput): Promise<User> {
     const id = generateId();
     const { rows } = await this.pool.query(
-      "INSERT INTO users (id, email, name) VALUES ($1, $2, $3) RETURNING *",
-      [id, input.email, input.name]
+      "INSERT INTO users (id, email, name, provider, provider_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [id, input.email, input.name, input.provider ?? "local", input.providerId ?? null]
     );
     return this.rowToUser(rows[0]);
   }
@@ -1102,6 +1112,8 @@ export class PgStore implements StorageAdapter {
       id: row.id as string,
       email: row.email as string,
       name: row.name as string,
+      provider: (row.provider as User["provider"]) ?? "local",
+      providerId: (row.provider_id as string) ?? undefined,
       createdAt: new Date(row.created_at as string),
       updatedAt: new Date(row.updated_at as string),
     };

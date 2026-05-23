@@ -26,7 +26,12 @@ export function oauthRouter(store: StorageAdapter) {
     let user = await store.getUserByEmail(userInfo.email);
 
     if (!user) {
-      user = await store.createUser({ email: userInfo.email, name: userInfo.name });
+      user = await store.createUser({
+        email: userInfo.email,
+        name: userInfo.name,
+        provider: userInfo.provider,
+        providerId: userInfo.providerId,
+      });
       // Create default API key for new user
       await store.createApiKey("default", user.id);
     }
@@ -128,7 +133,7 @@ export function oauthRouter(store: StorageAdapter) {
 
     return c.json({
       authenticated: true,
-      user: { id: user.id, email: user.email, name: user.name },
+      user: { id: user.id, email: user.email, name: user.name, provider: user.provider },
     });
   });
 

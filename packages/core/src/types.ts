@@ -88,11 +88,16 @@ export interface ListMemoriesFilter {
   sortOrder?: "asc" | "desc";
 }
 
+/** Auth provider type */
+export type AuthProvider = "google" | "github" | "local";
+
 /** User account */
 export interface User {
   id: string;
   email: string;
   name: string;
+  provider: AuthProvider;
+  providerId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -101,6 +106,8 @@ export interface User {
 export interface CreateUserInput {
   email: string;
   name: string;
+  provider?: AuthProvider;
+  providerId?: string;
 }
 
 /** Input for updating a user */
