@@ -688,7 +688,7 @@ npm run clean        # Remove build artifacts
 - [x] PostgreSQL + pgvector storage adapter (`@ponderdb/pg-store`)
 - [x] Google + GitHub OAuth login
 - [x] JWT session management for web dashboard
-- [ ] Cloud sync (local <-> cloud)
+- [x] Cloud sync (local <-> cloud via `/api/sync` endpoints)
 - [ ] Team/shared memories
 - [ ] Hosted service at ponderdb.dev
 

@@ -88,6 +88,43 @@ export class PonderClient {
     });
   }
 
+  async syncPull(since: string | null = null): Promise<{
+    memories: Memory[];
+    projects: unknown[];
+    categories: unknown[];
+    deletedMemoryIds: string[];
+    deletedProjectIds: string[];
+    deletedCategoryIds: string[];
+    syncedAt: string;
+  }> {
+    return this.fetch("/api/sync/pull", {
+      method: "POST",
+      body: JSON.stringify({ since }),
+    });
+  }
+
+  async syncPush(changes: {
+    memories: Memory[];
+    projects: unknown[];
+    categories: unknown[];
+    deletedMemoryIds: string[];
+    deletedProjectIds: string[];
+    deletedCategoryIds: string[];
+  }): Promise<{ ok: boolean; syncedAt: string }> {
+    return this.fetch("/api/sync/push", {
+      method: "POST",
+      body: JSON.stringify(changes),
+    });
+  }
+
+  async syncStatus(): Promise<{
+    totalMemories: number;
+    totalProjects: number;
+    totalCategories: number;
+  }> {
+    return this.fetch("/api/sync/status");
+  }
+
   async stats(): Promise<{ total: number; version: string }> {
     const health = await this.fetch<{ version: string }>("/health");
     const list = await this.fetch<PaginatedResult<Memory>>("/api/memories?limit=0");
