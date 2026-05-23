@@ -47,7 +47,8 @@ export function mcpHttpRouter(deps: McpHttpDeps) {
       }
     };
 
-    const mcpServer = createMcpServer(store, embedder);
+    const projectId = c.req.header("x-project-id");
+    const mcpServer = createMcpServer(store, embedder, projectId);
     await mcpServer.connect(transport);
 
     return transport.handleRequest(c.req.raw);

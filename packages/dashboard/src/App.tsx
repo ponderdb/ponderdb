@@ -10,6 +10,60 @@ import type { Memory, ProjectInfo } from "./api";
 
 type View = "dashboard" | "memories" | "categories" | "keys" | "projects";
 
+function SetupScreen({ onConnect }: { onConnect: (key: string) => void }) {
+  const [key, setKey] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = key.trim();
+    if (!trimmed) return;
+    if (!trimmed.startsWith("pndr_")) {
+      setError("API key must start with pndr_");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/memories?limit=0", {
+        headers: { Authorization: `Bearer ${trimmed}` },
+      });
+      if (!res.ok) throw new Error("Invalid API key");
+      onConnect(trimmed);
+    } catch {
+      setError("Invalid API key. Check the key printed in your server console.");
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="setup-screen">
+      <div className="setup-card">
+        <img src="/ponder-icon.svg" alt="PonderDB" className="setup-logo" />
+        <h1>Welcome to PonderDB</h1>
+        <p>Paste the API key from your server console to get started.</p>
+        <form onSubmit={handleSubmit} className="setup-form">
+          <input
+            type="text"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder="pndr_xK9mR2vT8pL1qN7w..."
+            autoFocus
+          />
+          <button type="submit" className="btn btn-primary" disabled={loading || !key.trim()}>
+            {loading ? "Connecting..." : "Connect"}
+          </button>
+        </form>
+        {error && <div className="setup-error">{error}</div>}
+        <p className="setup-hint">
+          Your API key was printed when the server started. Look for <code>pndr_...</code> in the terminal.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const [apiKey, setApiKey] = useState(
     () => localStorage.getItem("ponderdb_api_key") || "",
@@ -41,7 +95,6 @@ export function App() {
     listProjects(apiKey)
       .then((r) => {
         setProjects(r.projects);
-        // Auto-select first project if none selected or current doesn't exist
         if (r.projects.length > 0) {
           const currentExists = r.projects.some((p) => p.slug === projectId);
           if (!projectId || !currentExists) {
@@ -73,8 +126,13 @@ export function App() {
       </div>
     );
 
-  // If API key set but no projects exist, force project creation
-  if (apiKey && projects.length === 0 && healthy) {
+  // No API key — show setup screen
+  if (!apiKey) {
+    return <SetupScreen onConnect={setApiKey} />;
+  }
+
+  // API key set but no projects — force project creation
+  if (projects.length === 0) {
     return (
       <Layout
         view="projects"
@@ -112,7 +170,7 @@ export function App() {
         />
       )}
       {view === "categories" && <Categories apiKey={apiKey} projectId={projectId} onSelectMemory={handleSelectMemory} />}
-      {view === "keys" && <ApiKeys apiKey={apiKey} />}
+      {view === "keys" && <ApiKeys apiKey={apiKey} onApiKeyChange={setApiKey} />}
       {view === "projects" && <Projects apiKey={apiKey} currentProjectId={projectId} onProjectsChanged={loadProjects} />}
     </Layout>
   );

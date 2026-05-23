@@ -24,6 +24,7 @@ export function createCli() {
     .option("-i, --importance <importance>", "Importance level")
     .option("-t, --tags <tags>", "Comma-separated tags")
     .option("-p, --project <projectId>", "Project ID")
+    .option("-g, --global", "Mark as global (accessible across all projects)")
     .action(async (key: string, content: string, opts) => {
       const client = getClient();
       const memory = await client.remember({
@@ -33,8 +34,10 @@ export function createCli() {
         importance: opts.importance,
         tags: opts.tags?.split(",").map((t: string) => t.trim()),
         projectId: opts.project,
+        isGlobal: opts.global || undefined,
       });
-      console.log(`Remembered: ${memory.key} [${memory.category}]`);
+      const scope = memory.isGlobal ? " [global]" : memory.projectId ? ` [${memory.projectId}]` : "";
+      console.log(`Remembered: ${memory.key} [${memory.category}]${scope}`);
     });
 
   program
@@ -49,7 +52,8 @@ export function createCli() {
         console.log(`No memory found: ${key}`);
         process.exit(1);
       }
-      console.log(`\n${memory.key} [${memory.category}, ${memory.importance}]\n`);
+      const scope = memory.isGlobal ? " [global]" : memory.projectId ? ` [${memory.projectId}]` : "";
+      console.log(`\n${memory.key} [${memory.category}, ${memory.importance}]${scope}\n`);
       console.log(memory.content);
       console.log(`\nTags: ${memory.tags.join(", ") || "none"}`);
       console.log(`Updated: ${memory.updatedAt}`);
@@ -98,7 +102,8 @@ export function createCli() {
 
       console.log(`${result.total} memories total\n`);
       for (const m of result.items) {
-        console.log(`  ${m.key} [${m.category}] — ${m.content.slice(0, 80)}${m.content.length > 80 ? "..." : ""}`);
+        const scope = m.isGlobal ? " [global]" : "";
+        console.log(`  ${m.key} [${m.category}]${scope} — ${m.content.slice(0, 80)}${m.content.length > 80 ? "..." : ""}`);
       }
     });
 
