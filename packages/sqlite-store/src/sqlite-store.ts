@@ -89,6 +89,10 @@ interface UserRow {
   id: string;
   email: string;
   name: string;
+  provider: string;
+  provider_id: string | null;
+  last_login_ip: string | null;
+  last_login_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -174,6 +178,10 @@ export class SqliteStore implements StorageAdapter {
         id TEXT PRIMARY KEY,
         email TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
+        provider TEXT NOT NULL DEFAULT 'local',
+        provider_id TEXT,
+        last_login_ip TEXT,
+        last_login_at TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -312,6 +320,21 @@ export class SqliteStore implements StorageAdapter {
     const projCols2 = this.db.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
     if (!projCols2.some((c) => c.name === "team_id")) {
       this.db.exec("ALTER TABLE projects ADD COLUMN team_id TEXT");
+    }
+
+    // Migration: add provider columns to users if missing
+    const userCols = this.db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+    if (!userCols.some((c) => c.name === "provider")) {
+      this.db.exec("ALTER TABLE users ADD COLUMN provider TEXT NOT NULL DEFAULT 'local'");
+    }
+    if (!userCols.some((c) => c.name === "provider_id")) {
+      this.db.exec("ALTER TABLE users ADD COLUMN provider_id TEXT");
+    }
+    if (!userCols.some((c) => c.name === "last_login_ip")) {
+      this.db.exec("ALTER TABLE users ADD COLUMN last_login_ip TEXT");
+    }
+    if (!userCols.some((c) => c.name === "last_login_at")) {
+      this.db.exec("ALTER TABLE users ADD COLUMN last_login_at TEXT");
     }
 
     // Seed default local user
@@ -682,8 +705,8 @@ export class SqliteStore implements StorageAdapter {
     const id = generateId();
     const now = new Date().toISOString();
     this.db.prepare(
-      "INSERT INTO users (id, email, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
-    ).run(id, input.email, input.name, now, now);
+      "INSERT INTO users (id, email, name, provider, provider_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    ).run(id, input.email, input.name, input.provider ?? "local", input.providerId ?? null, now, now);
     return this.rowToUser(this.db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow);
   }
 
@@ -717,6 +740,8 @@ export class SqliteStore implements StorageAdapter {
       id: row.id,
       email: row.email,
       name: row.name,
+      provider: row.provider as User["provider"],
+      providerId: row.provider_id ?? undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };
