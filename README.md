@@ -49,11 +49,14 @@ ChatGPT ─┘
 - **Cross-tool memory** — Claude, Cursor, Copilot, ChatGPT, Gemini CLI, JetBrains all share the same memory via MCP
 - **Developer-specific** — Optimized for code patterns, architecture decisions, bug fixes, configs, workflows
 - **Local-first** — Data stays on your machine. No internet required. No cloud dependency.
-- **Semantic search** — Find memories by meaning, not just keywords
+- **Semantic search** — Find memories by meaning using transformer or OpenAI embeddings + sqlite-vec
 - **Auto-categorized** — Memories tagged as `architecture`, `bug`, `pattern`, `config`, `decision`, `snippet`, etc.
+- **Project scoping** — Organize memories into projects. Global memories accessible across all projects.
+- **Multi-user ready** — User accounts with scoped data (local user by default, OAuth coming in Phase 2)
+- **Flexible embeddings** — Local transformer (all-MiniLM-L6-v2), OpenAI (`text-embedding-3-small`), or hash-based fallback
 - **Secure by default** — API key auth for REST API, auto-generated on first start
 - **MCP native** — Works with any MCP-compatible tool out of the box (stdio + HTTP)
-- **Web dashboard** — Browse memories, search, manage API keys at `localhost:7437`
+- **Web dashboard** — Browse memories, manage projects, categories, API keys at `localhost:7437`
 
 ---
 
@@ -578,10 +581,12 @@ ponderdb/
 │  │  - Generate embeddings    │                    │
 │  │  - Hybrid search          │                    │
 │  └────────────┬─────────────┘                    │
-│  ┌────────────▼─────────────┐                    │
-│  │   SQLite + Embeddings     │                    │
-│  │   ~/.ponderdb/ponder.db   │                    │
-│  └──────────────────────────┘                    │
+│               │                                  │
+│  ┌────────────▼─────────────┐  ┌──────────────┐ │
+│  │   SQLite + sqlite-vec     │  │  Embedder    │ │
+│  │   ~/.ponderdb/ponder.db   │  │  Transformer │ │
+│  │                           │  │  or OpenAI   │ │
+│  └──────────────────────────┘  └──────────────┘ │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -615,7 +620,10 @@ Environment variables or `.env` file:
 | `PONDER_DATA_DIR` | `~/.ponderdb` | Data directory (SQLite DB stored here) |
 | `PONDER_API_KEY_REQUIRED` | `true` | Require API key for REST API |
 | `PONDER_PROJECT_ID` | _(none)_ | Default project ID for MCP operations |
-| `PONDER_EMBEDDER` | `transformer` | Embedding provider (`transformer` or `local`) |
+| `PONDER_EMBEDDER` | `transformer` | Embedding provider (`transformer`, `openai`, or `local`) |
+| `OPENAI_API_KEY` | _(none)_ | OpenAI API key (required when embedder is `openai`) |
+| `PONDER_EMBEDDING_MODEL` | `text-embedding-3-small` | OpenAI model name |
+| `PONDER_EMBEDDING_DIMS` | `1536` | Embedding dimensions (must match model) |
 
 ---
 
@@ -641,7 +649,10 @@ npm run clean        # Remove build artifacts
 | Runtime | Node.js >= 22 (LTS) | Stable, native fetch, modern ES |
 | API | [Hono](https://hono.dev) | Ultrafast, lightweight, 14KB |
 | Storage | [SQLite](https://sqlite.org) (better-sqlite3) | Zero config, local-first, reliable |
+| Vector Search | [sqlite-vec](https://github.com/asg017/sqlite-vec) | Native vector similarity in SQLite |
+| Embeddings | [Transformers.js](https://huggingface.co/docs/transformers.js) / [OpenAI](https://platform.openai.com/docs/guides/embeddings) | Local or cloud semantic embeddings |
 | MCP | [@modelcontextprotocol/sdk](https://modelcontextprotocol.io) | Standard protocol for AI tool integration |
+| Dashboard | React 19 + Vite | Modern, fast, light theme |
 | Language | TypeScript 5.x | Type safety across all packages |
 | Linter | ESLint 9 + Prettier | Code quality + consistent formatting |
 | Monorepo | npm workspaces | Simple, no extra tooling |
@@ -666,7 +677,7 @@ npm run clean        # Remove build artifacts
 - [x] Project scoping (`projectId` across all layers)
 - [x] Global memories (`isGlobal` — accessible across all projects)
 - [x] Custom styled dashboard (full-width layout, custom dropdowns, setup screen)
-- [ ] Real embedding models (BGE / OpenAI)
+- [x] OpenAI embedding support (`text-embedding-3-small` via API)
 - [ ] npm publish (`@ponderdb/server`, `@ponderdb/cli`, `@ponderdb/sdk`)
 
 ### Phase 2 — Cloud (in progress)
