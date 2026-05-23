@@ -17,6 +17,10 @@ import type {
   User,
   CreateUserInput,
   UpdateUserInput,
+  Team,
+  TeamMember,
+  TeamRole,
+  CreateTeamInput,
 } from "./types.js";
 
 /** Storage backend interface — implemented by sqlite-store, pg-store, etc. */
@@ -124,6 +128,35 @@ export interface StorageAdapter {
 
   /** Delete a project and all its memories */
   deleteProject(id: string): Promise<boolean>;
+
+  // ── Teams ──
+
+  /** Create a team */
+  createTeam(input: CreateTeamInput, ownerId: string): Promise<Team>;
+
+  /** Get team by ID */
+  getTeamById(id: string): Promise<Team | null>;
+
+  /** Get team by slug */
+  getTeamBySlug(slug: string): Promise<Team | null>;
+
+  /** List teams for a user */
+  listUserTeams(userId: string): Promise<(Team & { role: TeamRole })[]>;
+
+  /** Add member to team */
+  addTeamMember(teamId: string, userId: string, role: TeamRole): Promise<TeamMember>;
+
+  /** Remove member from team */
+  removeTeamMember(teamId: string, userId: string): Promise<boolean>;
+
+  /** List team members */
+  listTeamMembers(teamId: string): Promise<TeamMember[]>;
+
+  /** Update member role */
+  updateTeamMemberRole(teamId: string, userId: string, role: TeamRole): Promise<TeamMember>;
+
+  /** Delete a team and all its data */
+  deleteTeam(id: string): Promise<boolean>;
 
   // ── Sync ──
 

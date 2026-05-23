@@ -21,6 +21,10 @@ import type {
   User,
   CreateUserInput,
   UpdateUserInput,
+  Team,
+  TeamMember,
+  TeamRole,
+  CreateTeamInput,
 } from "@ponderdb/core";
 import {
   generateId,
@@ -70,6 +74,7 @@ interface ProjectRow {
   slug: string;
   description: string;
   user_id: string;
+  team_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -202,6 +207,23 @@ export class SqliteStore implements StorageAdapter {
         UNIQUE(name, project_id)
       );
       CREATE INDEX IF NOT EXISTS idx_categories_project ON categories(project_id);
+
+      CREATE TABLE IF NOT EXISTS teams (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        slug TEXT NOT NULL UNIQUE,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS team_members (
+        team_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'member',
+        joined_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (team_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_team_members_user ON team_members(user_id);
     `);
 
     // Migration: add user_id to projects if missing
@@ -216,9 +238,11 @@ export class SqliteStore implements StorageAdapter {
       this.db.exec("ALTER TABLE api_keys ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local'");
     }
 
-    // Migration: drop old UNIQUE(slug) and ensure UNIQUE(slug, user_id) on projects
-    // SQLite can't alter constraints, but new DBs get it from CREATE TABLE.
-    // Existing DBs keep UNIQUE(slug) which is stricter — safe.
+    // Migration: add team_id to projects if missing
+    const projCols2 = this.db.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
+    if (!projCols2.some((c) => c.name === "team_id")) {
+      this.db.exec("ALTER TABLE projects ADD COLUMN team_id TEXT");
+    }
 
     // Seed default local user
     const localUser = this.db.prepare("SELECT id FROM users WHERE id = 'local'").get();
@@ -726,7 +750,13 @@ export class SqliteStore implements StorageAdapter {
   // ── Projects ──
 
   async listProjects(userId: string): Promise<Project[]> {
-    const rows = this.db.prepare("SELECT * FROM projects WHERE user_id = ? ORDER BY name ASC").all(userId) as ProjectRow[];
+    // User's own projects + team projects they're a member of
+    const rows = this.db.prepare(`
+      SELECT DISTINCT p.* FROM projects p
+      LEFT JOIN team_members tm ON p.team_id = tm.team_id
+      WHERE p.user_id = ? OR tm.user_id = ?
+      ORDER BY p.name ASC
+    `).all(userId, userId) as ProjectRow[];
     return rows.map((r) => this.rowToProject(r));
   }
 
@@ -785,9 +815,117 @@ export class SqliteStore implements StorageAdapter {
       slug: row.slug,
       description: row.description,
       userId: row.user_id,
+      teamId: row.team_id ?? undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };
+  }
+
+  // ── Teams ──
+
+  async createTeam(input: CreateTeamInput, ownerId: string): Promise<Team> {
+    const id = generateId();
+    const slug = input.slug || slugify(input.name);
+    const now = new Date().toISOString();
+
+    const tx = this.db.transaction(() => {
+      this.db.prepare(
+        "INSERT INTO teams (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+      ).run(id, input.name, slug, now, now);
+      this.db.prepare(
+        "INSERT INTO team_members (team_id, user_id, role, joined_at) VALUES (?, ?, 'owner', ?)"
+      ).run(id, ownerId, now);
+    });
+    tx();
+
+    return { id, name: input.name, slug, createdAt: new Date(now), updatedAt: new Date(now) };
+  }
+
+  async getTeamById(id: string): Promise<Team | null> {
+    const row = this.db.prepare("SELECT * FROM teams WHERE id = ?").get(id) as {
+      id: string; name: string; slug: string; created_at: string; updated_at: string;
+    } | undefined;
+    if (!row) return null;
+    return { id: row.id, name: row.name, slug: row.slug, createdAt: new Date(row.created_at), updatedAt: new Date(row.updated_at) };
+  }
+
+  async getTeamBySlug(slug: string): Promise<Team | null> {
+    const row = this.db.prepare("SELECT * FROM teams WHERE slug = ?").get(slug) as {
+      id: string; name: string; slug: string; created_at: string; updated_at: string;
+    } | undefined;
+    if (!row) return null;
+    return { id: row.id, name: row.name, slug: row.slug, createdAt: new Date(row.created_at), updatedAt: new Date(row.updated_at) };
+  }
+
+  async listUserTeams(userId: string): Promise<(Team & { role: TeamRole })[]> {
+    const rows = this.db.prepare(`
+      SELECT t.*, tm.role FROM teams t
+      JOIN team_members tm ON t.id = tm.team_id
+      WHERE tm.user_id = ?
+      ORDER BY t.name ASC
+    `).all(userId) as { id: string; name: string; slug: string; role: string; created_at: string; updated_at: string }[];
+
+    return rows.map((r) => ({
+      id: r.id, name: r.name, slug: r.slug,
+      role: r.role as TeamRole,
+      createdAt: new Date(r.created_at), updatedAt: new Date(r.updated_at),
+    }));
+  }
+
+  async addTeamMember(teamId: string, userId: string, role: TeamRole): Promise<TeamMember> {
+    const now = new Date().toISOString();
+    this.db.prepare(
+      "INSERT INTO team_members (team_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)"
+    ).run(teamId, userId, role, now);
+    return { teamId, userId, role, joinedAt: new Date(now) };
+  }
+
+  async removeTeamMember(teamId: string, userId: string): Promise<boolean> {
+    const result = this.db.prepare("DELETE FROM team_members WHERE team_id = ? AND user_id = ?").run(teamId, userId);
+    return result.changes > 0;
+  }
+
+  async listTeamMembers(teamId: string): Promise<TeamMember[]> {
+    const rows = this.db.prepare(`
+      SELECT tm.*, u.email, u.name as user_name FROM team_members tm
+      JOIN users u ON tm.user_id = u.id
+      WHERE tm.team_id = ?
+      ORDER BY tm.joined_at ASC
+    `).all(teamId) as { team_id: string; user_id: string; role: string; joined_at: string; email: string; user_name: string }[];
+
+    return rows.map((r) => ({
+      teamId: r.team_id, userId: r.user_id, role: r.role as TeamRole,
+      joinedAt: new Date(r.joined_at),
+      user: { id: r.user_id, email: r.email, name: r.user_name },
+    }));
+  }
+
+  async updateTeamMemberRole(teamId: string, userId: string, role: TeamRole): Promise<TeamMember> {
+    this.db.prepare("UPDATE team_members SET role = ? WHERE team_id = ? AND user_id = ?").run(role, teamId, userId);
+    const row = this.db.prepare(
+      "SELECT * FROM team_members WHERE team_id = ? AND user_id = ?"
+    ).get(teamId, userId) as { team_id: string; user_id: string; role: string; joined_at: string };
+    return { teamId: row.team_id, userId: row.user_id, role: row.role as TeamRole, joinedAt: new Date(row.joined_at) };
+  }
+
+  async deleteTeam(id: string): Promise<boolean> {
+    const team = this.db.prepare("SELECT id FROM teams WHERE id = ?").get(id) as { id: string } | undefined;
+    if (!team) return false;
+
+    const tx = this.db.transaction(() => {
+      // Delete team projects' memories and vectors
+      const projectSlugs = this.db.prepare("SELECT slug FROM projects WHERE team_id = ?").all(id) as { slug: string }[];
+      for (const p of projectSlugs) {
+        this.db.prepare("DELETE FROM vec_memories WHERE memory_id IN (SELECT id FROM memories WHERE project_id = ?)").run(p.slug);
+        this.db.prepare("DELETE FROM memories WHERE project_id = ?").run(p.slug);
+        this.db.prepare("DELETE FROM categories WHERE project_id = ?").run(p.slug);
+      }
+      this.db.prepare("DELETE FROM projects WHERE team_id = ?").run(id);
+      this.db.prepare("DELETE FROM team_members WHERE team_id = ?").run(id);
+      this.db.prepare("DELETE FROM teams WHERE id = ?").run(id);
+    });
+    tx();
+    return true;
   }
 
   // ── Sync ──

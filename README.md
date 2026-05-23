@@ -689,7 +689,7 @@ npm run clean        # Remove build artifacts
 - [x] Google + GitHub OAuth login
 - [x] JWT session management for web dashboard
 - [x] Cloud sync (local <-> cloud via `/api/sync` endpoints)
-- [ ] Team/shared memories
+- [x] Team/shared memories (teams, members, roles, shared projects)
 - [ ] Hosted service at ponderdb.dev
 
 ### Phase 3 — Polish
