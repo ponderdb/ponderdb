@@ -25,6 +25,7 @@ import type {
   TeamMember,
   TeamRole,
   CreateTeamInput,
+  MemoryVersion,
 } from "@ponderdb/core";
 import {
   generateId,
@@ -224,6 +225,20 @@ export class SqliteStore implements StorageAdapter {
         PRIMARY KEY (team_id, user_id)
       );
       CREATE INDEX IF NOT EXISTS idx_team_members_user ON team_members(user_id);
+
+      CREATE TABLE IF NOT EXISTS memory_history (
+        id TEXT PRIMARY KEY,
+        memory_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        category TEXT NOT NULL,
+        importance TEXT NOT NULL,
+        tags TEXT NOT NULL DEFAULT '[]',
+        metadata TEXT NOT NULL DEFAULT '{}',
+        version INTEGER NOT NULL,
+        changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+        changed_by TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_memory_history_memory ON memory_history(memory_id);
     `);
 
     // Migration: add user_id to projects if missing
@@ -351,6 +366,12 @@ export class SqliteStore implements StorageAdapter {
   async update(id: MemoryId, input: UpdateMemoryInput & { embedding?: number[] }): Promise<Memory> {
     const existing = this.db.prepare("SELECT * FROM memories WHERE id = ?").get(id) as SqliteRow | undefined;
     if (!existing) throw new MemoryNotFoundError(id);
+
+    // Save current state to history before modifying
+    this.db.prepare(`
+      INSERT INTO memory_history (id, memory_id, content, category, importance, tags, metadata, version, changed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    `).run(generateId(), id, existing.content, existing.category, existing.importance, existing.tags, existing.metadata, existing.version);
 
     const sets: string[] = ["updated_at = datetime('now')", "version = version + 1"];
     const params: unknown[] = [];
@@ -556,6 +577,48 @@ export class SqliteStore implements StorageAdapter {
     this.db
       .prepare("UPDATE memories SET accessed_at = datetime('now'), access_count = access_count + 1 WHERE id = ?")
       .run(id);
+  }
+
+  async getMemoryHistory(memoryId: MemoryId): Promise<MemoryVersion[]> {
+    const rows = this.db.prepare(
+      "SELECT * FROM memory_history WHERE memory_id = ? ORDER BY version DESC"
+    ).all(memoryId) as {
+      id: string; memory_id: string; content: string; category: string;
+      importance: string; tags: string; metadata: string; version: number;
+      changed_at: string; changed_by: string | null;
+    }[];
+
+    return rows.map((r) => ({
+      id: r.id,
+      memoryId: r.memory_id,
+      content: r.content,
+      category: r.category,
+      importance: r.importance as MemoryVersion["importance"],
+      tags: JSON.parse(r.tags),
+      metadata: JSON.parse(r.metadata),
+      version: r.version,
+      changedAt: new Date(r.changed_at),
+      changedBy: r.changed_by ?? undefined,
+    }));
+  }
+
+  async restoreMemoryVersion(memoryId: MemoryId, versionNumber: number): Promise<Memory> {
+    const historyRow = this.db.prepare(
+      "SELECT * FROM memory_history WHERE memory_id = ? AND version = ?"
+    ).get(memoryId, versionNumber) as {
+      content: string; category: string; importance: string;
+      tags: string; metadata: string;
+    } | undefined;
+
+    if (!historyRow) throw new MemoryNotFoundError(`version ${versionNumber} of ${memoryId}`);
+
+    return this.update(memoryId, {
+      content: historyRow.content,
+      category: historyRow.category,
+      importance: historyRow.importance as Memory["importance"],
+      tags: JSON.parse(historyRow.tags),
+      metadata: JSON.parse(historyRow.metadata),
+    });
   }
 
   // ── Users ──

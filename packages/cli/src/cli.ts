@@ -1,4 +1,6 @@
 import { Command } from "commander";
+import { readFileSync } from "node:fs";
+import { basename } from "node:path";
 import { PonderClient } from "@ponderdb/sdk";
 
 function getClient(): PonderClient {
@@ -148,6 +150,35 @@ export function createCli() {
       const pulled = await client.syncPull(null);
       console.log(`  ${pulled.memories.length} memories, ${pulled.projects.length} projects`);
       console.log(`Synced at: ${pulled.syncedAt}`);
+    });
+
+  program
+    .command("import")
+    .description("Import memories from CLAUDE.md, .cursorrules, or similar files")
+    .argument("<file>", "File to import (e.g. CLAUDE.md, .cursorrules)")
+    .option("-p, --project <projectId>", "Project ID")
+    .option("--dry-run", "Preview what would be imported without saving")
+    .action(async (file: string, opts) => {
+      const content = readFileSync(file, "utf-8");
+      const source = basename(file).toLowerCase().replace(/\s+/g, "-");
+      const client = getClient();
+
+      if (opts.dryRun) {
+        // Use preview endpoint
+        const res = await client.importPreview(content, source);
+        console.log(`Would import ${res.count} memories from ${file}:\n`);
+        for (const m of res.memories) {
+          console.log(`  ${m.key} [${m.category}] (${m.contentLength} chars)`);
+        }
+        return;
+      }
+
+      const res = await client.importFile(content, source, opts.project);
+      console.log(`Imported ${res.imported} memories from ${file}`);
+      if (res.skipped > 0) console.log(`Skipped ${res.skipped} (already exist)`);
+      for (const m of res.memories) {
+        console.log(`  ${m.key} [${m.category}]`);
+      }
     });
 
   return program;

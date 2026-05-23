@@ -370,5 +370,67 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
     },
   );
 
+  // Tool: memory_history — view version history
+  server.tool(
+    "memory_history",
+    "View the version history of a memory. Shows all previous versions with timestamps.",
+    {
+      key: z.string().describe("Memory key"),
+      projectId: z.string().optional(),
+    },
+    async ({ key, projectId: pid }) => {
+      const projectId = pid ?? defaultProjectId;
+      const memory = await store.getByKey(key, projectId);
+      if (!memory) {
+        return { content: [{ type: "text" as const, text: `No memory found for key: ${key}` }] };
+      }
+
+      const history = await store.getMemoryHistory(memory.id);
+      if (history.length === 0) {
+        return { content: [{ type: "text" as const, text: `No previous versions for ${key} (current: v${memory.version})` }] };
+      }
+
+      const lines = history.map((v) =>
+        `v${v.version} (${v.changedAt.toISOString()}): ${v.content.slice(0, 100)}${v.content.length > 100 ? "..." : ""}`
+      );
+      return {
+        content: [{
+          type: "text" as const,
+          text: `**${key}** — ${history.length} previous version(s)\nCurrent: v${memory.version}\n\n${lines.join("\n")}`,
+        }],
+      };
+    },
+  );
+
+  // Tool: restore_memory — restore to a previous version
+  server.tool(
+    "restore_memory",
+    "Restore a memory to a previous version. Use memory_history to see available versions.",
+    {
+      key: z.string().describe("Memory key"),
+      version: z.number().describe("Version number to restore"),
+      projectId: z.string().optional(),
+    },
+    async ({ key, version, projectId: pid }) => {
+      const projectId = pid ?? defaultProjectId;
+      const memory = await store.getByKey(key, projectId);
+      if (!memory) {
+        return { content: [{ type: "text" as const, text: `No memory found for key: ${key}` }] };
+      }
+
+      try {
+        const restored = await store.restoreMemoryVersion(memory.id, version);
+        return {
+          content: [{
+            type: "text" as const,
+            text: `Restored ${key} to v${version}. Current version is now v${restored.version}.`,
+          }],
+        };
+      } catch {
+        return { content: [{ type: "text" as const, text: `Version ${version} not found for ${key}` }] };
+      }
+    },
+  );
+
   return server;
 }

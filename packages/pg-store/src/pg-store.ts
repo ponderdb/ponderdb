@@ -19,6 +19,7 @@ import type {
   User,
   CreateUserInput,
   UpdateUserInput,
+  MemoryVersion,
   Team,
   TeamMember,
   TeamRole,
@@ -163,6 +164,22 @@ export class PgStore implements StorageAdapter {
       `);
       await client.query("CREATE INDEX IF NOT EXISTS idx_team_members_user ON team_members(user_id)");
 
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS memory_history (
+          id TEXT PRIMARY KEY,
+          memory_id TEXT NOT NULL,
+          content TEXT NOT NULL,
+          category TEXT NOT NULL,
+          importance TEXT NOT NULL,
+          tags JSONB NOT NULL DEFAULT '[]',
+          metadata JSONB NOT NULL DEFAULT '{}',
+          version INTEGER NOT NULL,
+          changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          changed_by TEXT
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_memory_history_memory ON memory_history(memory_id)");
+
       // Seed default local user
       await client.query(
         "INSERT INTO users (id, email, name) VALUES ('local', 'local@ponderdb.local', 'Local User') ON CONFLICT (id) DO NOTHING"
@@ -230,6 +247,14 @@ export class PgStore implements StorageAdapter {
   async update(id: MemoryId, input: UpdateMemoryInput & { embedding?: number[] }): Promise<Memory> {
     const existing = await this.getById(id);
     if (!existing) throw new MemoryNotFoundError(id);
+
+    // Save current state to history
+    await this.pool.query(
+      `INSERT INTO memory_history (id, memory_id, content, category, importance, tags, metadata, version)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [generateId(), id, existing.content, existing.category, existing.importance,
+       JSON.stringify(existing.tags), JSON.stringify(existing.metadata), existing.version]
+    );
 
     const sets: string[] = ["updated_at = NOW()", "version = version + 1"];
     const params: unknown[] = [];
@@ -386,6 +411,42 @@ export class PgStore implements StorageAdapter {
       "UPDATE memories SET accessed_at = NOW(), access_count = access_count + 1 WHERE id = $1",
       [id]
     );
+  }
+
+  async getMemoryHistory(memoryId: MemoryId): Promise<MemoryVersion[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM memory_history WHERE memory_id = $1 ORDER BY version DESC",
+      [memoryId]
+    );
+    return rows.map((r) => ({
+      id: r.id as string,
+      memoryId: r.memory_id as string,
+      content: r.content as string,
+      category: r.category as string,
+      importance: r.importance as MemoryVersion["importance"],
+      tags: (r.tags as string[]) ?? [],
+      metadata: (r.metadata as Record<string, unknown>) ?? {},
+      version: r.version as number,
+      changedAt: new Date(r.changed_at as string),
+      changedBy: (r.changed_by as string) ?? undefined,
+    }));
+  }
+
+  async restoreMemoryVersion(memoryId: MemoryId, versionNumber: number): Promise<Memory> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM memory_history WHERE memory_id = $1 AND version = $2",
+      [memoryId, versionNumber]
+    );
+    if (rows.length === 0) throw new MemoryNotFoundError(`version ${versionNumber} of ${memoryId}`);
+
+    const r = rows[0];
+    return this.update(memoryId, {
+      content: r.content as string,
+      category: r.category as string,
+      importance: r.importance as Memory["importance"],
+      tags: r.tags as string[],
+      metadata: r.metadata as Record<string, unknown>,
+    });
   }
 
   // ── Users ──

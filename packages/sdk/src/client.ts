@@ -125,6 +125,28 @@ export class PonderClient {
     return this.fetch("/api/sync/status");
   }
 
+  async importFile(content: string, source: string, projectId?: string): Promise<{
+    imported: number;
+    skipped: number;
+    memories: { key: string; category: string }[];
+    skippedKeys: string[];
+  }> {
+    return this.fetch("/api/import", {
+      method: "POST",
+      body: JSON.stringify({ content, source, projectId: projectId ?? this.defaultProjectId }),
+    });
+  }
+
+  async importPreview(content: string, source: string): Promise<{
+    count: number;
+    memories: { key: string; category: string; contentLength: number }[];
+  }> {
+    return this.fetch("/api/import/preview", {
+      method: "POST",
+      body: JSON.stringify({ content, source }),
+    });
+  }
+
   async stats(): Promise<{ total: number; version: string }> {
     const health = await this.fetch<{ version: string }>("/health");
     const list = await this.fetch<PaginatedResult<Memory>>("/api/memories?limit=0");
