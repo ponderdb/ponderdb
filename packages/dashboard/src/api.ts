@@ -35,6 +35,7 @@ interface ApiKeyInfo {
   id: string;
   name: string;
   prefix: string;
+  rawKey?: string;
   createdAt: string;
   lastUsedAt?: string;
 }

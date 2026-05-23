@@ -194,6 +194,7 @@ export class SqliteStore implements StorageAdapter {
         name TEXT NOT NULL,
         key_hash TEXT NOT NULL UNIQUE,
         prefix TEXT NOT NULL,
+        raw_key TEXT,
         user_id TEXT NOT NULL DEFAULT 'local',
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         last_used_at TEXT,
@@ -300,6 +301,11 @@ export class SqliteStore implements StorageAdapter {
     const keyCols = this.db.prepare("PRAGMA table_info(api_keys)").all() as { name: string }[];
     if (!keyCols.some((c) => c.name === "user_id")) {
       this.db.exec("ALTER TABLE api_keys ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local'");
+    }
+
+    // Migration: add raw_key to api_keys if missing
+    if (!keyCols.some((c) => c.name === "raw_key")) {
+      this.db.exec("ALTER TABLE api_keys ADD COLUMN raw_key TEXT");
     }
 
     // Migration: add team_id to projects if missing
@@ -724,12 +730,12 @@ export class SqliteStore implements StorageAdapter {
     const now = new Date().toISOString();
 
     this.db.prepare(`
-      INSERT INTO api_keys (id, name, key_hash, prefix, user_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, name, hash, prefix, userId, now);
+      INSERT INTO api_keys (id, name, key_hash, prefix, raw_key, user_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, name, hash, prefix, rawKey, userId, now);
 
     return {
-      apiKey: { id, name, keyHash: hash, prefix, userId, createdAt: new Date(now) },
+      apiKey: { id, name, keyHash: hash, prefix, rawKey, userId, createdAt: new Date(now) },
       rawKey,
     };
   }
@@ -763,7 +769,7 @@ export class SqliteStore implements StorageAdapter {
 
   async listApiKeys(userId: string): Promise<ApiKey[]> {
     const rows = this.db.prepare("SELECT * FROM api_keys WHERE user_id = ? ORDER BY created_at DESC").all(userId) as {
-      id: string; name: string; key_hash: string; prefix: string; user_id: string;
+      id: string; name: string; key_hash: string; prefix: string; raw_key: string | null; user_id: string;
       created_at: string; last_used_at: string | null; expires_at: string | null;
     }[];
 
@@ -772,6 +778,7 @@ export class SqliteStore implements StorageAdapter {
       name: row.name,
       keyHash: "[hidden]",
       prefix: row.prefix,
+      rawKey: row.raw_key ?? undefined,
       userId: row.user_id,
       createdAt: new Date(row.created_at),
       lastUsedAt: row.last_used_at ? new Date(row.last_used_at) : undefined,

@@ -40,24 +40,6 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
   );
 }
 
-// Store full API keys in localStorage so user can copy them later
-function saveFullKey(prefix: string, fullKey: string) {
-  const stored = JSON.parse(localStorage.getItem("ponderdb_full_keys") || "{}");
-  stored[prefix] = fullKey;
-  localStorage.setItem("ponderdb_full_keys", JSON.stringify(stored));
-}
-
-function getFullKey(prefix: string): string | null {
-  const stored = JSON.parse(localStorage.getItem("ponderdb_full_keys") || "{}");
-  return stored[prefix] || null;
-}
-
-function removeFullKey(prefix: string) {
-  const stored = JSON.parse(localStorage.getItem("ponderdb_full_keys") || "{}");
-  delete stored[prefix];
-  localStorage.setItem("ponderdb_full_keys", JSON.stringify(stored));
-}
-
 interface ApiKeysProps {
   apiKey: string;
   onApiKeyChange: (key: string) => void;
@@ -87,7 +69,6 @@ export function ApiKeys({ apiKey, onApiKeyChange }: ApiKeysProps) {
     try {
       const result = await createApiKey(apiKey, createKeyName.trim());
       setNewKeyValue(result.key);
-      saveFullKey(result.prefix, result.key);
       setCreateKeyName("");
       setShowCreateModal(false);
       setCreating(false);
@@ -101,11 +82,10 @@ export function ApiKeys({ apiKey, onApiKeyChange }: ApiKeysProps) {
     }
   };
 
-  const handleRevoke = async (id: string, name: string, prefix: string) => {
+  const handleRevoke = async (id: string, name: string) => {
     if (!confirm(`Revoke API key "${name}"? This cannot be undone.`)) return;
     try {
       await revokeApiKey(apiKey, id);
-      removeFullKey(prefix);
       load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Revoke failed");
@@ -158,7 +138,7 @@ export function ApiKeys({ apiKey, onApiKeyChange }: ApiKeysProps) {
             <tr>
               <th>Status</th>
               <th>Name</th>
-              <th>Prefix</th>
+              <th>Key</th>
               <th>Created</th>
               <th>Last Used</th>
               <th>Actions</th>
@@ -173,17 +153,14 @@ export function ApiKeys({ apiKey, onApiKeyChange }: ApiKeysProps) {
                 <td style={{ fontWeight: 500 }}>{k.name}</td>
                 <td>
                   <div className="prefix-cell">
-                    <code>{getFullKey(k.prefix) ? `${k.prefix}...` : `${k.prefix}...`}</code>
-                    <CopyButton text={getFullKey(k.prefix) || `${k.prefix}...`} />
-                    {!getFullKey(k.prefix) && (
-                      <span className="key-hint" title="Full key only available at creation time">prefix only</span>
-                    )}
+                    <code>{k.rawKey || `${k.prefix}...`}</code>
+                    <CopyButton text={k.rawKey || k.prefix} />
                   </div>
                 </td>
                 <td className="date-cell">{new Date(k.createdAt).toLocaleDateString()}</td>
                 <td className="date-cell">{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : "Never"}</td>
                 <td>
-                  <button className="btn btn-danger btn-sm" onClick={() => handleRevoke(k.id, k.name, k.prefix)}>
+                  <button className="btn btn-danger btn-sm" onClick={() => handleRevoke(k.id, k.name)}>
                     Revoke
                   </button>
                 </td>

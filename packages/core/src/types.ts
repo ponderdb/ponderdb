@@ -142,6 +142,7 @@ export interface ApiKey {
   name: string;
   keyHash: string;
   prefix: string;
+  rawKey?: string;
   userId: string;
   createdAt: Date;
   lastUsedAt?: Date;
