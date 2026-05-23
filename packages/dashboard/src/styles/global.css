@@ -1773,6 +1773,12 @@ code {
   color: var(--text-secondary);
 }
 
+.key-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .copy-btn {
   padding: 3px 6px;
   display: inline-flex;
