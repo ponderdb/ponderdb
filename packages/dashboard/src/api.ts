@@ -120,7 +120,7 @@ export async function deleteMemory(apiKey: string, key: string, projectId?: stri
 }
 
 export async function listApiKeys(
-  apiKey: string,
+  apiKey?: string,
 ): Promise<{ keys: ApiKeyInfo[] }> {
   const res = await fetch(`${BASE}/api/auth/keys`, {
     headers: headers(apiKey),
@@ -244,7 +244,7 @@ interface ProjectInfo {
 }
 
 export async function listProjects(
-  apiKey: string,
+  apiKey?: string,
 ): Promise<{ projects: ProjectInfo[] }> {
   const res = await fetch(`${BASE}/api/projects`, {
     headers: headers(apiKey),
