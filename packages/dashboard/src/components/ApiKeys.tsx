@@ -47,37 +47,38 @@ interface ApiKeysProps {
 
 export function ApiKeys({ apiKey, onApiKeyChange }: ApiKeysProps) {
   const [keys, setKeys] = useState<ApiKeyInfo[]>([]);
-  const [newKeyName, setNewKeyName] = useState("");
+  const [search, setSearch] = useState("");
   const [newKeyValue, setNewKeyValue] = useState("");
   const [error, setError] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createKeyName, setCreateKeyName] = useState("");
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(() => {
-    /* proceed — auth handled by cookie or apiKey */
     listApiKeys(apiKey)
       .then((r) => setKeys(r.keys))
       .catch((e) => setError(e.message));
   }, [apiKey]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newKeyName.trim()) return;
+  const handleCreate = async () => {
+    if (!createKeyName.trim()) return;
+    setCreating(true);
     setError("");
     try {
-      const result = await createApiKey(apiKey, newKeyName.trim());
+      const result = await createApiKey(apiKey, createKeyName.trim());
       setNewKeyValue(result.key);
-      setNewKeyName("");
-      // Auto-activate new key immediately
+      setCreateKeyName("");
+      setShowCreateModal(false);
+      setCreating(false);
       onApiKeyChange(result.key);
-      // Reload key list using the new key (old key still valid too)
       listApiKeys(result.key)
         .then((r) => setKeys(r.keys))
-        .catch(() => {});
+        .catch(() => { /* ignore */ });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Create failed");
+      setCreating(false);
     }
   };
 
@@ -91,36 +92,39 @@ export function ApiKeys({ apiKey, onApiKeyChange }: ApiKeysProps) {
     }
   };
 
-  const isActive = (prefix: string) => apiKey.startsWith(prefix);
-
-  /* auth guard removed — session handles auth */
+  const filtered = search
+    ? keys.filter((k) => k.name.toLowerCase().includes(search.toLowerCase()) || k.prefix.includes(search))
+    : keys;
 
   return (
     <div>
       <div className="page-header">
         <h2>API Keys</h2>
-        <p>Create and manage API keys for REST API access</p>
+        <p>Create and manage API keys for MCP, SDK, and CLI integrations</p>
       </div>
 
-      <form onSubmit={handleCreate} className="create-key-form">
+      <div className="apikeys-toolbar">
         <input
           type="text"
-          value={newKeyName}
-          onChange={(e) => setNewKeyName(e.target.value)}
-          placeholder="Key name (e.g. my-script)"
+          className="filter-search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search keys..."
         />
-        <button type="submit" className="btn btn-primary">Create Key</button>
-      </form>
+        <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          Create API Key
+        </button>
+      </div>
 
       {newKeyValue && (
         <div className="new-key-banner">
           <strong>New key created — copy now, shown only once:</strong>
           <code>{newKeyValue}</code>
           <CopyButton text={newKeyValue} label="Copy" />
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => setNewKeyValue("")}
-          >
+          <button className="btn btn-secondary btn-sm" onClick={() => setNewKeyValue("")}>
             Dismiss
           </button>
         </div>
@@ -141,14 +145,10 @@ export function ApiKeys({ apiKey, onApiKeyChange }: ApiKeysProps) {
             </tr>
           </thead>
           <tbody>
-            {keys.map((k) => (
-              <tr key={k.id} className={isActive(k.prefix) ? "api-key-active-row" : ""}>
+            {filtered.map((k) => (
+              <tr key={k.id}>
                 <td>
-                  {isActive(k.prefix) ? (
-                    <span className="badge badge-active">Active</span>
-                  ) : (
-                    <span className="badge badge-inactive">—</span>
-                  )}
+                  <span className="badge badge-active">Active</span>
                 </td>
                 <td style={{ fontWeight: 500 }}>{k.name}</td>
                 <td>
@@ -160,42 +160,52 @@ export function ApiKeys({ apiKey, onApiKeyChange }: ApiKeysProps) {
                 <td className="date-cell">{new Date(k.createdAt).toLocaleDateString()}</td>
                 <td className="date-cell">{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleDateString() : "Never"}</td>
                 <td>
-                  <div className="api-key-actions">
-                    {!isActive(k.prefix) && newKeyValue && newKeyValue.startsWith(k.prefix) ? (
-                      <button
-                        className="btn btn-primary btn-sm"
-                        onClick={() => { onApiKeyChange(newKeyValue); }}
-                      >
-                        Use
-                      </button>
-                    ) : !isActive(k.prefix) ? (
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => {
-                          const input = prompt(`Enter full API key for "${k.name}" (starts with ${k.prefix}...):`);
-                          if (input?.startsWith(k.prefix)) onApiKeyChange(input);
-                          else if (input) alert("Key doesn't match this prefix.");
-                        }}
-                      >
-                        Use
-                      </button>
-                    ) : null}
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => handleRevoke(k.id, k.name)}
-                    >
-                      Revoke
-                    </button>
-                  </div>
+                  <button className="btn btn-danger btn-sm" onClick={() => handleRevoke(k.id, k.name)}>
+                    Revoke
+                  </button>
                 </td>
               </tr>
             ))}
-            {keys.length === 0 && (
-              <tr><td colSpan={6} className="empty-row">No API keys found</td></tr>
+            {filtered.length === 0 && (
+              <tr><td colSpan={6} className="empty-row">{search ? "No keys matching search" : "No API keys yet"}</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {showCreateModal && (
+        <div className="dialog-overlay" onClick={() => setShowCreateModal(false)}>
+          <div className="dialog" onClick={(e) => e.stopPropagation()}>
+            <h3 className="dialog-title">Create API Key</h3>
+            <p className="dialog-text">
+              Give your key a name to identify where it's used (e.g. "Claude Code", "Cursor", "CI/CD").
+            </p>
+            <div className="dialog-confirm-input">
+              <label>Key Name</label>
+              <input
+                type="text"
+                value={createKeyName}
+                onChange={(e) => setCreateKeyName(e.target.value)}
+                placeholder="e.g. claude-code"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === "Enter") handleCreate(); }}
+              />
+            </div>
+            <div className="dialog-actions">
+              <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleCreate}
+                disabled={creating || !createKeyName.trim()}
+              >
+                {creating ? "Creating..." : "Create Key"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
