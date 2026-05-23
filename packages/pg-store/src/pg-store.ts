@@ -19,6 +19,10 @@ import type {
   User,
   CreateUserInput,
   UpdateUserInput,
+  Team,
+  TeamMember,
+  TeamRole,
+  CreateTeamInput,
 } from "@ponderdb/core";
 import {
   generateId,
@@ -137,6 +141,27 @@ export class PgStore implements StorageAdapter {
         )
       `);
       await client.query("CREATE INDEX IF NOT EXISTS idx_categories_project ON categories(project_id)");
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS teams (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          slug TEXT NOT NULL UNIQUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS team_members (
+          team_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'member',
+          joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (team_id, user_id)
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_team_members_user ON team_members(user_id)");
 
       // Seed default local user
       await client.query(
@@ -513,9 +538,12 @@ export class PgStore implements StorageAdapter {
   // ── Projects ──
 
   async listProjects(userId: string): Promise<Project[]> {
-    const { rows } = await this.pool.query(
-      "SELECT * FROM projects WHERE user_id = $1 ORDER BY name ASC", [userId]
-    );
+    const { rows } = await this.pool.query(`
+      SELECT DISTINCT p.* FROM projects p
+      LEFT JOIN team_members tm ON p.team_id = tm.team_id
+      WHERE p.user_id = $1 OR tm.user_id = $1
+      ORDER BY p.name ASC
+    `, [userId]);
     return rows.map((r) => this.rowToProject(r));
   }
 
@@ -558,6 +586,124 @@ export class PgStore implements StorageAdapter {
     await this.pool.query("DELETE FROM categories WHERE project_id = $1", [slug]);
     await this.pool.query("DELETE FROM projects WHERE id = $1", [id]);
     return true;
+  }
+
+  // ── Teams ──
+
+  async createTeam(input: CreateTeamInput, ownerId: string): Promise<Team> {
+    const id = generateId();
+    const slug = input.slug || slugify(input.name);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows } = await client.query(
+        "INSERT INTO teams (id, name, slug) VALUES ($1, $2, $3) RETURNING *",
+        [id, input.name, slug]
+      );
+      await client.query(
+        "INSERT INTO team_members (team_id, user_id, role) VALUES ($1, $2, 'owner')",
+        [id, ownerId]
+      );
+      await client.query("COMMIT");
+      const r = rows[0];
+      return { id: r.id, name: r.name, slug: r.slug, createdAt: new Date(r.created_at), updatedAt: new Date(r.updated_at) };
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getTeamById(id: string): Promise<Team | null> {
+    const { rows } = await this.pool.query("SELECT * FROM teams WHERE id = $1", [id]);
+    if (rows.length === 0) return null;
+    const r = rows[0];
+    return { id: r.id, name: r.name, slug: r.slug, createdAt: new Date(r.created_at), updatedAt: new Date(r.updated_at) };
+  }
+
+  async getTeamBySlug(slug: string): Promise<Team | null> {
+    const { rows } = await this.pool.query("SELECT * FROM teams WHERE slug = $1", [slug]);
+    if (rows.length === 0) return null;
+    const r = rows[0];
+    return { id: r.id, name: r.name, slug: r.slug, createdAt: new Date(r.created_at), updatedAt: new Date(r.updated_at) };
+  }
+
+  async listUserTeams(userId: string): Promise<(Team & { role: TeamRole })[]> {
+    const { rows } = await this.pool.query(`
+      SELECT t.*, tm.role FROM teams t
+      JOIN team_members tm ON t.id = tm.team_id
+      WHERE tm.user_id = $1 ORDER BY t.name ASC
+    `, [userId]);
+    return rows.map((r) => ({
+      id: r.id as string, name: r.name as string, slug: r.slug as string,
+      role: r.role as TeamRole,
+      createdAt: new Date(r.created_at as string), updatedAt: new Date(r.updated_at as string),
+    }));
+  }
+
+  async addTeamMember(teamId: string, userId: string, role: TeamRole): Promise<TeamMember> {
+    const { rows } = await this.pool.query(
+      "INSERT INTO team_members (team_id, user_id, role) VALUES ($1, $2, $3) RETURNING *",
+      [teamId, userId, role]
+    );
+    return { teamId, userId, role, joinedAt: new Date(rows[0].joined_at) };
+  }
+
+  async removeTeamMember(teamId: string, userId: string): Promise<boolean> {
+    const result = await this.pool.query(
+      "DELETE FROM team_members WHERE team_id = $1 AND user_id = $2", [teamId, userId]
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async listTeamMembers(teamId: string): Promise<TeamMember[]> {
+    const { rows } = await this.pool.query(`
+      SELECT tm.*, u.email, u.name as user_name FROM team_members tm
+      JOIN users u ON tm.user_id = u.id
+      WHERE tm.team_id = $1 ORDER BY tm.joined_at ASC
+    `, [teamId]);
+    return rows.map((r) => ({
+      teamId: r.team_id as string, userId: r.user_id as string, role: r.role as TeamRole,
+      joinedAt: new Date(r.joined_at as string),
+      user: { id: r.user_id as string, email: r.email as string, name: r.user_name as string },
+    }));
+  }
+
+  async updateTeamMemberRole(teamId: string, userId: string, role: TeamRole): Promise<TeamMember> {
+    await this.pool.query(
+      "UPDATE team_members SET role = $1 WHERE team_id = $2 AND user_id = $3",
+      [role, teamId, userId]
+    );
+    const { rows } = await this.pool.query(
+      "SELECT * FROM team_members WHERE team_id = $1 AND user_id = $2", [teamId, userId]
+    );
+    return { teamId, userId, role, joinedAt: new Date(rows[0].joined_at) };
+  }
+
+  async deleteTeam(id: string): Promise<boolean> {
+    const { rows } = await this.pool.query("SELECT id FROM teams WHERE id = $1", [id]);
+    if (rows.length === 0) return false;
+
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const { rows: projectRows } = await client.query("SELECT slug FROM projects WHERE team_id = $1", [id]);
+      for (const p of projectRows) {
+        await client.query("DELETE FROM memories WHERE project_id = $1", [p.slug]);
+        await client.query("DELETE FROM categories WHERE project_id = $1", [p.slug]);
+      }
+      await client.query("DELETE FROM projects WHERE team_id = $1", [id]);
+      await client.query("DELETE FROM team_members WHERE team_id = $1", [id]);
+      await client.query("DELETE FROM teams WHERE id = $1", [id]);
+      await client.query("COMMIT");
+      return true;
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   // ── Sync ──
@@ -734,6 +880,7 @@ export class PgStore implements StorageAdapter {
       slug: row.slug as string,
       description: row.description as string,
       userId: row.user_id as string,
+      teamId: (row.team_id as string) ?? undefined,
       createdAt: new Date(row.created_at as string),
       updatedAt: new Date(row.updated_at as string),
     };

@@ -109,6 +109,33 @@ export interface UpdateUserInput {
   email?: string;
 }
 
+/** Team */
+export interface Team {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Team membership role */
+export type TeamRole = "owner" | "admin" | "member";
+
+/** Team member */
+export interface TeamMember {
+  userId: string;
+  teamId: string;
+  role: TeamRole;
+  joinedAt: Date;
+  user?: { id: string; email: string; name: string };
+}
+
+/** Input for creating a team */
+export interface CreateTeamInput {
+  name: string;
+  slug?: string;
+}
+
 /** API key */
 export interface ApiKey {
   id: string;
@@ -128,6 +155,7 @@ export interface Project {
   slug: string;
   description: string;
   userId: string;
+  teamId?: string;
   createdAt: Date;
   updatedAt: Date;
 }

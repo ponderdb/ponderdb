@@ -13,6 +13,7 @@ import { oauthRouter } from "./routes/oauth.js";
 import { categoriesRouter } from "./routes/categories.js";
 import { projectsRouter } from "./routes/projects.js";
 import { syncRouter } from "./routes/sync.js";
+import { teamsRouter } from "./routes/teams.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { mcpHttpRouter } from "./mcp-http.js";
 
@@ -56,6 +57,7 @@ export function createApp(deps: AppDeps) {
   app.route("/api/categories", categoriesRouter(deps));
   app.route("/api/projects", projectsRouter(deps));
   app.route("/api/sync", syncRouter(deps));
+  app.route("/api/teams", teamsRouter(deps));
 
   // Dashboard static files — check bundled location first, then monorepo location
   const __dirname = dirname(fileURLToPath(import.meta.url));
