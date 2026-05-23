@@ -1,14 +1,15 @@
 import { Hono } from "hono";
-import type { AppDeps } from "../app.js";
+import type { AppDeps, AppEnv } from "../app.js";
 import { ValidationError } from "@ponderdb/core";
 
 export function projectsRouter(deps: AppDeps) {
-  const router = new Hono();
+  const router = new Hono<AppEnv>();
   const { store } = deps;
 
-  // List all projects
+  // List all projects for current user
   router.get("/", async (c) => {
-    const projects = await store.listProjects();
+    const userId = c.get("userId") || "local";
+    const projects = await store.listProjects(userId);
 
     // Attach memory counts + category counts
     const withStats = await Promise.all(
@@ -26,7 +27,8 @@ export function projectsRouter(deps: AppDeps) {
   // Get project by slug
   router.get("/:slug", async (c) => {
     const slug = c.req.param("slug");
-    const project = await store.getProjectBySlug(slug);
+    const userId = c.get("userId") || "local";
+    const project = await store.getProjectBySlug(slug, userId);
     if (!project) {
       return c.json({ error: { code: "PROJECT_NOT_FOUND", message: `Project not found: ${slug}` } }, 404);
     }
@@ -39,10 +41,12 @@ export function projectsRouter(deps: AppDeps) {
     const body = await c.req.json();
     if (!body.name) throw new ValidationError("name is required");
 
+    const userId = c.get("userId") || "local";
     const project = await store.createProject({
       name: body.name,
       slug: body.slug,
       description: body.description,
+      userId,
     });
 
     return c.json(project, 201);
@@ -74,7 +78,8 @@ export function projectsRouter(deps: AppDeps) {
   // Project stats
   router.get("/:slug/stats", async (c) => {
     const slug = c.req.param("slug");
-    const project = await store.getProjectBySlug(slug);
+    const userId = c.get("userId") || "local";
+    const project = await store.getProjectBySlug(slug, userId);
     if (!project) {
       return c.json({ error: { code: "PROJECT_NOT_FOUND", message: `Project not found: ${slug}` } }, 404);
     }

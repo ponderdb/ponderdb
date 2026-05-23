@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { StorageAdapter, EmbeddingProvider, MemoryCategory } from "@ponderdb/core";
 import { detectCategory } from "@ponderdb/core";
 
-export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvider, headerProjectId?: string) {
+export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvider, headerProjectId?: string, userId = "local") {
   const defaultProjectId = headerProjectId ?? process.env.PONDER_PROJECT_ID ?? undefined;
 
   const server = new McpServer({
@@ -281,7 +281,7 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
     "List all memory projects.",
     {},
     async () => {
-      const projects = await store.listProjects();
+      const projects = await store.listProjects(userId);
       if (projects.length === 0) {
         return { content: [{ type: "text" as const, text: "No projects found." }] };
       }
@@ -301,7 +301,7 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
       description: z.string().optional().describe("What this project is about"),
     },
     async ({ name, description }) => {
-      const project = await store.createProject({ name, description });
+      const project = await store.createProject({ name, description, userId });
       return { content: [{ type: "text" as const, text: `Created project: ${project.name} (slug: ${project.slug})` }] };
     },
   );
@@ -316,7 +316,7 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
       description: z.string().optional(),
     },
     async ({ slug, name, description }) => {
-      const project = await store.getProjectBySlug(slug);
+      const project = await store.getProjectBySlug(slug, userId);
       if (!project) {
         return { content: [{ type: "text" as const, text: `Project not found: ${slug}` }] };
       }
@@ -337,7 +337,7 @@ export function createMcpServer(store: StorageAdapter, embedder: EmbeddingProvid
       if (!confirm) {
         return { content: [{ type: "text" as const, text: "Deletion not confirmed. Set confirm: true to proceed." }] };
       }
-      const project = await store.getProjectBySlug(slug);
+      const project = await store.getProjectBySlug(slug, userId);
       if (!project) {
         return { content: [{ type: "text" as const, text: `Project not found: ${slug}` }] };
       }

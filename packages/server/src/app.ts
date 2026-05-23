@@ -14,6 +14,14 @@ import { projectsRouter } from "./routes/projects.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { mcpHttpRouter } from "./mcp-http.js";
 
+/** Hono context variables set by auth middleware */
+export type AppEnv = {
+  Variables: {
+    userId: string;
+    apiKeyId: string;
+  };
+};
+
 export interface AppDeps {
   store: StorageAdapter;
   embedder: EmbeddingProvider;
@@ -21,7 +29,7 @@ export interface AppDeps {
 }
 
 export function createApp(deps: AppDeps) {
-  const app = new Hono();
+  const app = new Hono<AppEnv>();
 
   app.use("*", cors());
   app.use("*", logger());
