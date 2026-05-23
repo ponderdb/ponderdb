@@ -88,15 +88,13 @@ async function main() {
       console.log(`Auth: ${apiKeyRequired ? "enabled" : "disabled"}`);
     });
 
-    // Graceful shutdown — close HTTP server then DB
+    // Graceful shutdown — close HTTP server then DB, force exit quickly
     const shutdown = () => {
       console.log("\nShutting down...");
-      server.close(async () => {
-        await store.close();
-        process.exit(0);
-      });
-      // Force exit after 3s if server won't close
-      setTimeout(() => process.exit(0), 3000);
+      server.close(() => { /* server closed */ });
+      store.close().catch(() => { /* ignore */ }).finally(() => process.exit(0));
+      // Force exit after 2s no matter what
+      setTimeout(() => process.exit(0), 2000).unref();
     };
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
