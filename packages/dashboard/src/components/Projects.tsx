@@ -17,7 +17,7 @@ export function Projects({ apiKey, currentProjectId, onProjectsChanged }: Projec
   const [deleting, setDeleting] = useState<ProjectInfo | null>(null);
 
   const load = useCallback(() => {
-    if (!apiKey) { setLoading(false); return; }
+    /* proceed — auth handled by cookie or apiKey */
     setError("");
     listProjects(apiKey)
       .then((r) => setProjects(r.projects))
@@ -50,7 +50,7 @@ export function Projects({ apiKey, currentProjectId, onProjectsChanged }: Projec
     }
   };
 
-  if (!apiKey) return <div className="empty"><p>Enter your API key in the sidebar</p></div>;
+  /* auth guard removed — session handles auth */
   if (loading) return <div className="loading">Loading...</div>;
 
   return (

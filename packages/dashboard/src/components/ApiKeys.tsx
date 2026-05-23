@@ -52,7 +52,7 @@ export function ApiKeys({ apiKey, onApiKeyChange }: ApiKeysProps) {
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
-    if (!apiKey) return;
+    /* proceed — auth handled by cookie or apiKey */
     listApiKeys(apiKey)
       .then((r) => setKeys(r.keys))
       .catch((e) => setError(e.message));
@@ -93,13 +93,7 @@ export function ApiKeys({ apiKey, onApiKeyChange }: ApiKeysProps) {
 
   const isActive = (prefix: string) => apiKey.startsWith(prefix);
 
-  if (!apiKey) {
-    return (
-      <div className="empty">
-        <p>Enter your API key in the sidebar to manage keys</p>
-      </div>
-    );
-  }
+  /* auth guard removed — session handles auth */
 
   return (
     <div>

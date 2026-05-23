@@ -18,7 +18,7 @@ export function Categories({ apiKey, projectId, onSelectMemory }: CategoriesProp
   const [editingCat, setEditingCat] = useState<CategoryInfo | null>(null);
 
   const load = useCallback(() => {
-    if (!apiKey) { setLoading(false); return; }
+    /* proceed — auth handled by cookie or apiKey */
     setError("");
     Promise.all([
       listCategories(apiKey, projectId || undefined),
@@ -34,7 +34,7 @@ export function Categories({ apiKey, projectId, onSelectMemory }: CategoriesProp
 
   useEffect(() => { load(); }, [load]);
 
-  if (!apiKey) return <div className="empty"><p>Enter your API key in the sidebar</p></div>;
+  /* auth guard removed — session handles auth */
   if (loading) return <div className="loading">Loading...</div>;
 
   // Build memory map by category

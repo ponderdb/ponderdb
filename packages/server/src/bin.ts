@@ -71,20 +71,12 @@ async function main() {
     // HTTP mode — REST API with auth
     const apiKeyRequired = process.env.PONDER_API_KEY_REQUIRED !== "false";
 
-    // Auto-generate API key on first start (for local user)
+    // Auto-generate default API key on first start (for MCP/SDK/CLI use)
     if (apiKeyRequired) {
       const keyCount = await store.countApiKeys("local");
       if (keyCount === 0) {
-        const { rawKey } = await store.createApiKey("default", "local");
-        console.log("\n  ┌─────────────────────────────────────────────────────┐");
-        console.log("  │                                                     │");
-        console.log("  │  Your API key (save this — shown only once):        │");
-        console.log(`  │  ${rawKey}  │`);
-        console.log("  │                                                     │");
-        console.log("  │  Use: Authorization: Bearer <key>                   │");
-        console.log("  │  Or:  PONDER_API_KEY=<key> in .env                  │");
-        console.log("  │                                                     │");
-        console.log("  └─────────────────────────────────────────────────────┘\n");
+        await store.createApiKey("default", "local");
+        console.log("  Default API key created. Manage keys from the dashboard.");
       }
     }
 
