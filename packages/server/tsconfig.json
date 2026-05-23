@@ -6,7 +6,8 @@
   },
   "references": [
     { "path": "../core" },
-    { "path": "../sqlite-store" }
+    { "path": "../sqlite-store" },
+    { "path": "../pg-store" }
   ],
   "include": ["src"]
 }

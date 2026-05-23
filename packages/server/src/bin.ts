@@ -2,7 +2,9 @@
 import { serve } from "@hono/node-server";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { SqliteStore } from "@ponderdb/sqlite-store";
+import { PgStore } from "@ponderdb/pg-store";
 import { expandPath, DEFAULT_CONFIG } from "@ponderdb/core";
+import type { StorageAdapter } from "@ponderdb/core";
 import { createApp } from "./app.js";
 import { createMcpServer } from "./mcp.js";
 import { TransformerEmbeddingProvider } from "./embedder/transformer.js";
@@ -45,8 +47,17 @@ async function main() {
     }
   }
 
-  // Initialize storage (uses embedder dimensions for vector table)
-  const store = new SqliteStore(dataDir, embedder.dimensions());
+  // Initialize storage — PostgreSQL (cloud) or SQLite (local)
+  let store: StorageAdapter;
+  const dbUrl = process.env.DATABASE_URL;
+
+  if (dbUrl) {
+    store = new PgStore({ connectionString: dbUrl, dimensions: embedder.dimensions() });
+    console.log("Storage: PostgreSQL + pgvector");
+  } else {
+    store = new SqliteStore(dataDir, embedder.dimensions());
+    console.log("Storage: SQLite + sqlite-vec");
+  }
   await store.init();
 
   if (mode === "mcp") {

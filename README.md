@@ -551,7 +551,8 @@ await ponder.forget("auth/jwt-config");
 ponderdb/
 ├── packages/
 │   ├── core/           — Types, interfaces, storage abstractions, utilities
-│   ├── sqlite-store/   — SQLite + better-sqlite3 storage adapter
+│   ├── sqlite-store/   — SQLite + sqlite-vec storage adapter (local mode)
+│   ├── pg-store/       — PostgreSQL + pgvector storage adapter (cloud mode)
 │   ├── server/         — Hono REST API + MCP server (stdio + HTTP)
 │   ├── dashboard/      — React + Vite web dashboard
 │   ├── sdk/            — TypeScript client SDK
@@ -624,6 +625,7 @@ Environment variables or `.env` file:
 | `OPENAI_API_KEY` | _(none)_ | OpenAI API key (required when embedder is `openai`) |
 | `PONDER_EMBEDDING_MODEL` | `text-embedding-3-small` | OpenAI model name |
 | `PONDER_EMBEDDING_DIMS` | `1536` | Embedding dimensions (must match model) |
+| `DATABASE_URL` | _(none)_ | PostgreSQL connection string (enables cloud mode) |
 
 ---
 
@@ -683,7 +685,7 @@ npm run clean        # Remove build artifacts
 ### Phase 2 — Cloud (in progress)
 - [x] Multi-user data model (User type, `userId` scoping on projects + API keys)
 - [x] Auth middleware with user context extraction
-- [ ] PostgreSQL + pgvector storage adapter (`@ponderdb/pg-store`)
+- [x] PostgreSQL + pgvector storage adapter (`@ponderdb/pg-store`)
 - [ ] Google + GitHub OAuth login
 - [ ] JWT session management for web dashboard
 - [ ] Cloud sync (local <-> cloud)

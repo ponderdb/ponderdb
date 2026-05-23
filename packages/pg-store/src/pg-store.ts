@@ -1,0 +1,633 @@
+import pg from "pg";
+import pgvector from "pgvector/pg";
+import type {
+  StorageAdapter,
+  Memory,
+  MemoryId,
+  CreateMemoryInput,
+  UpdateMemoryInput,
+  ListMemoriesFilter,
+  PaginatedResult,
+  SearchResult,
+  ApiKey,
+  Category,
+  CreateCategoryInput,
+  UpdateCategoryInput,
+  Project,
+  CreateProjectInput,
+  UpdateProjectInput,
+  User,
+  CreateUserInput,
+  UpdateUserInput,
+} from "@ponderdb/core";
+import {
+  generateId,
+  generateApiKey,
+  hashApiKey,
+  slugify,
+  estimateTokens,
+  MemoryNotFoundError,
+  DuplicateKeyError,
+  SYSTEM_CATEGORIES,
+} from "@ponderdb/core";
+
+export interface PgStoreConfig {
+  connectionString: string;
+  dimensions?: number;
+}
+
+export class PgStore implements StorageAdapter {
+  private pool: pg.Pool;
+  private dimensions: number;
+
+  constructor(config: PgStoreConfig) {
+    this.pool = new pg.Pool({ connectionString: config.connectionString });
+    this.dimensions = config.dimensions ?? 384;
+  }
+
+  async init(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await pgvector.registerTypes(client);
+
+      await client.query("CREATE EXTENSION IF NOT EXISTS vector");
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          email TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS memories (
+          id TEXT PRIMARY KEY,
+          key TEXT NOT NULL,
+          content TEXT NOT NULL,
+          category TEXT NOT NULL DEFAULT 'custom',
+          importance TEXT NOT NULL DEFAULT 'medium',
+          tags JSONB NOT NULL DEFAULT '[]',
+          metadata JSONB NOT NULL DEFAULT '{}',
+          embedding vector(${this.dimensions}),
+          project_id TEXT,
+          is_global BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          accessed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          access_count INTEGER NOT NULL DEFAULT 0,
+          token_count INTEGER NOT NULL DEFAULT 0,
+          version INTEGER NOT NULL DEFAULT 1,
+          UNIQUE(key, project_id)
+        )
+      `);
+
+      await client.query("CREATE INDEX IF NOT EXISTS idx_memories_key ON memories(key)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_memories_project_id ON memories(project_id)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at)");
+      await client.query("CREATE INDEX IF NOT EXISTS idx_memories_key_project ON memories(key, project_id)");
+
+      // IVFFlat index for vector search (created after data exists, or use HNSW)
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_memories_embedding ON memories
+        USING hnsw (embedding vector_cosine_ops)
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS projects (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          slug TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          user_id TEXT NOT NULL DEFAULT 'local',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(slug, user_id)
+        )
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS api_keys (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          key_hash TEXT NOT NULL UNIQUE,
+          prefix TEXT NOT NULL,
+          user_id TEXT NOT NULL DEFAULT 'local',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_used_at TIMESTAMPTZ,
+          expires_at TIMESTAMPTZ
+        )
+      `);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS categories (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          color TEXT NOT NULL DEFAULT '#64748b',
+          icon TEXT,
+          project_id TEXT,
+          is_system BOOLEAN NOT NULL DEFAULT FALSE,
+          is_ai_generated BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE(name, project_id)
+        )
+      `);
+      await client.query("CREATE INDEX IF NOT EXISTS idx_categories_project ON categories(project_id)");
+
+      // Seed default local user
+      await client.query(
+        "INSERT INTO users (id, email, name) VALUES ('local', 'local@ponderdb.local', 'Local User') ON CONFLICT (id) DO NOTHING"
+      );
+
+      // Seed system categories
+      const { rows: catRows } = await client.query("SELECT COUNT(*) as count FROM categories WHERE is_system = TRUE");
+      if (Number(catRows[0].count) === 0) {
+        for (const cat of SYSTEM_CATEGORIES) {
+          await client.query(
+            "INSERT INTO categories (id, name, description, color, is_system) VALUES ($1, $2, $3, $4, TRUE) ON CONFLICT DO NOTHING",
+            [generateId(), cat.name, cat.description, cat.color]
+          );
+        }
+      }
+    } finally {
+      client.release();
+    }
+  }
+
+  async close(): Promise<void> {
+    await this.pool.end();
+  }
+
+  // ── Memory CRUD ──
+
+  async create(input: CreateMemoryInput & { embedding?: number[] }): Promise<Memory> {
+    const { rows: existing } = await this.pool.query(
+      "SELECT id FROM memories WHERE key = $1 AND project_id IS NOT DISTINCT FROM $2",
+      [input.key, input.projectId ?? null]
+    );
+    if (existing.length > 0) throw new DuplicateKeyError(input.key);
+
+    const id = generateId();
+    const tokenCount = estimateTokens(input.content);
+    const embedding = input.embedding ? pgvector.toSql(input.embedding) : null;
+
+    await this.pool.query(
+      `INSERT INTO memories (id, key, content, category, importance, tags, metadata, embedding, project_id, is_global, token_count)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [
+        id, input.key, input.content,
+        input.category ?? "custom", input.importance ?? "medium",
+        JSON.stringify(input.tags ?? []), JSON.stringify(input.metadata ?? {}),
+        embedding, input.projectId ?? null, input.isGlobal ?? false, tokenCount,
+      ]
+    );
+
+    return (await this.getById(id))!;
+  }
+
+  async getById(id: MemoryId): Promise<Memory | null> {
+    const { rows } = await this.pool.query("SELECT * FROM memories WHERE id = $1", [id]);
+    return rows.length > 0 ? this.rowToMemory(rows[0]) : null;
+  }
+
+  async getByKey(key: string, projectId?: string): Promise<Memory | null> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM memories WHERE key = $1 AND project_id IS NOT DISTINCT FROM $2",
+      [key, projectId ?? null]
+    );
+    return rows.length > 0 ? this.rowToMemory(rows[0]) : null;
+  }
+
+  async update(id: MemoryId, input: UpdateMemoryInput & { embedding?: number[] }): Promise<Memory> {
+    const existing = await this.getById(id);
+    if (!existing) throw new MemoryNotFoundError(id);
+
+    const sets: string[] = ["updated_at = NOW()", "version = version + 1"];
+    const params: unknown[] = [];
+    let paramIdx = 1;
+
+    if (input.content !== undefined) {
+      sets.push(`content = $${paramIdx++}`); params.push(input.content);
+      sets.push(`token_count = $${paramIdx++}`); params.push(estimateTokens(input.content));
+    }
+    if (input.category !== undefined) { sets.push(`category = $${paramIdx++}`); params.push(input.category); }
+    if (input.importance !== undefined) { sets.push(`importance = $${paramIdx++}`); params.push(input.importance); }
+    if (input.tags !== undefined) { sets.push(`tags = $${paramIdx++}`); params.push(JSON.stringify(input.tags)); }
+    if (input.metadata !== undefined) { sets.push(`metadata = $${paramIdx++}`); params.push(JSON.stringify(input.metadata)); }
+    if (input.isGlobal !== undefined) { sets.push(`is_global = $${paramIdx++}`); params.push(input.isGlobal); }
+    if (input.embedding !== undefined) {
+      sets.push(`embedding = $${paramIdx++}`);
+      params.push(input.embedding ? pgvector.toSql(input.embedding) : null);
+    }
+
+    params.push(id);
+    await this.pool.query(`UPDATE memories SET ${sets.join(", ")} WHERE id = $${paramIdx}`, params);
+    return (await this.getById(id))!;
+  }
+
+  async delete(id: MemoryId): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM memories WHERE id = $1", [id]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async list(filter: ListMemoriesFilter): Promise<PaginatedResult<Memory>> {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    let paramIdx = 1;
+
+    if (filter.category) { conditions.push(`category = $${paramIdx++}`); params.push(filter.category); }
+    if (filter.projectId) {
+      conditions.push(`(project_id = $${paramIdx++} OR is_global = TRUE)`);
+      params.push(filter.projectId);
+    }
+    if (filter.importance) { conditions.push(`importance = $${paramIdx++}`); params.push(filter.importance); }
+    if (filter.tags?.length) {
+      for (const tag of filter.tags) {
+        conditions.push(`tags ? $${paramIdx++}`);
+        params.push(tag);
+      }
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    const columnMap: Record<string, string> = {
+      updatedAt: "updated_at", createdAt: "created_at",
+      accessedAt: "accessed_at", accessCount: "access_count",
+    };
+    const sortCol = columnMap[filter.sortBy ?? "updatedAt"] ?? "updated_at";
+    const sortDir = filter.sortOrder === "asc" ? "ASC" : "DESC";
+    const limit = filter.limit ?? 50;
+    const offset = filter.offset ?? 0;
+
+    const countResult = await this.pool.query(`SELECT COUNT(*) as count FROM memories ${where}`, params);
+    const total = Number(countResult.rows[0].count);
+
+    const dataParams = [...params, limit, offset];
+    const { rows } = await this.pool.query(
+      `SELECT * FROM memories ${where} ORDER BY ${sortCol} ${sortDir} LIMIT $${paramIdx++} OFFSET $${paramIdx}`,
+      dataParams
+    );
+
+    return {
+      items: rows.map((r) => this.rowToMemory(r)),
+      total,
+      limit,
+      offset,
+      hasMore: offset + rows.length < total,
+    };
+  }
+
+  async vectorSearch(
+    embedding: number[],
+    limit: number,
+    filter?: { category?: string; projectId?: string },
+  ): Promise<SearchResult[]> {
+    const conditions: string[] = ["embedding IS NOT NULL"];
+    const params: unknown[] = [pgvector.toSql(embedding)];
+    let paramIdx = 2;
+
+    if (filter?.category) { conditions.push(`category = $${paramIdx++}`); params.push(filter.category); }
+    if (filter?.projectId) {
+      conditions.push(`(project_id = $${paramIdx++} OR is_global = TRUE)`);
+      params.push(filter.projectId);
+    }
+
+    params.push(limit);
+    const where = conditions.join(" AND ");
+
+    const { rows } = await this.pool.query(
+      `SELECT *, 1 - (embedding <=> $1) as similarity
+       FROM memories WHERE ${where}
+       ORDER BY embedding <=> $1
+       LIMIT $${paramIdx}`,
+      params
+    );
+
+    return rows.map((r) => ({
+      memory: this.rowToMemory(r),
+      score: Number(r.similarity),
+      matchType: "semantic" as const,
+    }));
+  }
+
+  async keywordSearch(
+    query: string,
+    limit: number,
+    filter?: { category?: string; projectId?: string },
+  ): Promise<SearchResult[]> {
+    const conditions: string[] = ["(content ILIKE $1 OR key ILIKE $1)"];
+    const params: unknown[] = [`%${query}%`];
+    let paramIdx = 2;
+
+    if (filter?.category) { conditions.push(`category = $${paramIdx++}`); params.push(filter.category); }
+    if (filter?.projectId) {
+      conditions.push(`(project_id = $${paramIdx++} OR is_global = TRUE)`);
+      params.push(filter.projectId);
+    }
+
+    params.push(limit);
+    const where = conditions.join(" AND ");
+
+    const { rows } = await this.pool.query(
+      `SELECT * FROM memories WHERE ${where} ORDER BY updated_at DESC LIMIT $${paramIdx}`,
+      params
+    );
+
+    return rows.map((r) => ({
+      memory: this.rowToMemory(r),
+      score: 1.0,
+      matchType: "keyword" as const,
+    }));
+  }
+
+  async count(filter?: { projectId?: string }): Promise<number> {
+    if (filter?.projectId) {
+      const { rows } = await this.pool.query(
+        "SELECT COUNT(*) as count FROM memories WHERE project_id = $1 OR is_global = TRUE",
+        [filter.projectId]
+      );
+      return Number(rows[0].count);
+    }
+    const { rows } = await this.pool.query("SELECT COUNT(*) as count FROM memories");
+    return Number(rows[0].count);
+  }
+
+  async recordAccess(id: MemoryId): Promise<void> {
+    await this.pool.query(
+      "UPDATE memories SET accessed_at = NOW(), access_count = access_count + 1 WHERE id = $1",
+      [id]
+    );
+  }
+
+  // ── Users ──
+
+  async createUser(input: CreateUserInput): Promise<User> {
+    const id = generateId();
+    const { rows } = await this.pool.query(
+      "INSERT INTO users (id, email, name) VALUES ($1, $2, $3) RETURNING *",
+      [id, input.email, input.name]
+    );
+    return this.rowToUser(rows[0]);
+  }
+
+  async getUserById(id: string): Promise<User | null> {
+    const { rows } = await this.pool.query("SELECT * FROM users WHERE id = $1", [id]);
+    return rows.length > 0 ? this.rowToUser(rows[0]) : null;
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    const { rows } = await this.pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    return rows.length > 0 ? this.rowToUser(rows[0]) : null;
+  }
+
+  async updateUser(id: string, input: UpdateUserInput): Promise<User> {
+    const sets: string[] = ["updated_at = NOW()"];
+    const params: unknown[] = [];
+    let paramIdx = 1;
+    if (input.name !== undefined) { sets.push(`name = $${paramIdx++}`); params.push(input.name); }
+    if (input.email !== undefined) { sets.push(`email = $${paramIdx++}`); params.push(input.email); }
+    params.push(id);
+    const { rows } = await this.pool.query(
+      `UPDATE users SET ${sets.join(", ")} WHERE id = $${paramIdx} RETURNING *`, params
+    );
+    return this.rowToUser(rows[0]);
+  }
+
+  async listUsers(): Promise<User[]> {
+    const { rows } = await this.pool.query("SELECT * FROM users ORDER BY created_at ASC");
+    return rows.map((r) => this.rowToUser(r));
+  }
+
+  // ── API Keys ──
+
+  async createApiKey(name: string, userId: string): Promise<{ apiKey: ApiKey; rawKey: string }> {
+    const { key: rawKey, prefix, hash } = generateApiKey();
+    const id = generateId();
+
+    const { rows } = await this.pool.query(
+      "INSERT INTO api_keys (id, name, key_hash, prefix, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [id, name, hash, prefix, userId]
+    );
+
+    return {
+      apiKey: this.rowToApiKey(rows[0]),
+      rawKey,
+    };
+  }
+
+  async validateApiKey(rawKey: string): Promise<ApiKey | null> {
+    const hash = hashApiKey(rawKey);
+    const { rows } = await this.pool.query("SELECT * FROM api_keys WHERE key_hash = $1", [hash]);
+    if (rows.length === 0) return null;
+
+    const row = rows[0];
+    if (row.expires_at && new Date(row.expires_at) < new Date()) return null;
+
+    await this.pool.query("UPDATE api_keys SET last_used_at = NOW() WHERE id = $1", [row.id]);
+    return this.rowToApiKey(row);
+  }
+
+  async listApiKeys(userId: string): Promise<ApiKey[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC", [userId]
+    );
+    return rows.map((r) => ({ ...this.rowToApiKey(r), keyHash: "[hidden]" }));
+  }
+
+  async deleteApiKey(id: string): Promise<boolean> {
+    const result = await this.pool.query("DELETE FROM api_keys WHERE id = $1", [id]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  async countApiKeys(userId: string): Promise<number> {
+    const { rows } = await this.pool.query(
+      "SELECT COUNT(*) as count FROM api_keys WHERE user_id = $1", [userId]
+    );
+    return Number(rows[0].count);
+  }
+
+  // ── Categories ──
+
+  async listCategories(projectId?: string): Promise<Category[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM categories WHERE project_id IS NOT DISTINCT FROM $1 OR is_system = TRUE ORDER BY is_system DESC, name ASC",
+      [projectId ?? null]
+    );
+    return rows.map((r) => this.rowToCategory(r));
+  }
+
+  async getCategoryByName(name: string, projectId?: string): Promise<Category | null> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM categories WHERE name = $1 AND (project_id IS NOT DISTINCT FROM $2 OR is_system = TRUE) ORDER BY project_id IS NOT NULL DESC LIMIT 1",
+      [name, projectId ?? null]
+    );
+    return rows.length > 0 ? this.rowToCategory(rows[0]) : null;
+  }
+
+  async createCategory(input: CreateCategoryInput & { isSystem?: boolean; isAiGenerated?: boolean }): Promise<Category> {
+    const id = generateId();
+    const { rows } = await this.pool.query(
+      `INSERT INTO categories (id, name, description, color, icon, project_id, is_system, is_ai_generated)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [
+        id, input.name, input.description ?? "", input.color ?? "#64748b",
+        input.icon ?? null, input.projectId ?? null,
+        input.isSystem ?? false, input.isAiGenerated ?? false,
+      ]
+    );
+    return this.rowToCategory(rows[0]);
+  }
+
+  async updateCategory(id: string, input: UpdateCategoryInput): Promise<Category> {
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    let paramIdx = 1;
+    if (input.name !== undefined) { sets.push(`name = $${paramIdx++}`); params.push(input.name); }
+    if (input.description !== undefined) { sets.push(`description = $${paramIdx++}`); params.push(input.description); }
+    if (input.color !== undefined) { sets.push(`color = $${paramIdx++}`); params.push(input.color); }
+    if (input.icon !== undefined) { sets.push(`icon = $${paramIdx++}`); params.push(input.icon); }
+    if (sets.length === 0) {
+      const { rows } = await this.pool.query("SELECT * FROM categories WHERE id = $1", [id]);
+      return this.rowToCategory(rows[0]);
+    }
+    params.push(id);
+    const { rows } = await this.pool.query(
+      `UPDATE categories SET ${sets.join(", ")} WHERE id = $${paramIdx} RETURNING *`, params
+    );
+    return this.rowToCategory(rows[0]);
+  }
+
+  async deleteCategory(id: string): Promise<boolean> {
+    const { rows: catRows } = await this.pool.query("SELECT name FROM categories WHERE id = $1", [id]);
+    if (catRows.length > 0) {
+      await this.pool.query("UPDATE memories SET category = 'custom' WHERE category = $1", [catRows[0].name]);
+    }
+    const result = await this.pool.query("DELETE FROM categories WHERE id = $1 AND is_system = FALSE", [id]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  // ── Projects ──
+
+  async listProjects(userId: string): Promise<Project[]> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM projects WHERE user_id = $1 ORDER BY name ASC", [userId]
+    );
+    return rows.map((r) => this.rowToProject(r));
+  }
+
+  async getProjectBySlug(slug: string, userId: string): Promise<Project | null> {
+    const { rows } = await this.pool.query(
+      "SELECT * FROM projects WHERE slug = $1 AND user_id = $2", [slug, userId]
+    );
+    return rows.length > 0 ? this.rowToProject(rows[0]) : null;
+  }
+
+  async createProject(input: CreateProjectInput & { userId: string }): Promise<Project> {
+    const id = generateId();
+    const slug = input.slug || slugify(input.name);
+    const { rows } = await this.pool.query(
+      "INSERT INTO projects (id, name, slug, description, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [id, input.name, slug, input.description ?? "", input.userId]
+    );
+    return this.rowToProject(rows[0]);
+  }
+
+  async updateProject(id: string, input: UpdateProjectInput): Promise<Project> {
+    const sets: string[] = ["updated_at = NOW()"];
+    const params: unknown[] = [];
+    let paramIdx = 1;
+    if (input.name !== undefined) { sets.push(`name = $${paramIdx++}`); params.push(input.name); }
+    if (input.description !== undefined) { sets.push(`description = $${paramIdx++}`); params.push(input.description); }
+    params.push(id);
+    const { rows } = await this.pool.query(
+      `UPDATE projects SET ${sets.join(", ")} WHERE id = $${paramIdx} RETURNING *`, params
+    );
+    return this.rowToProject(rows[0]);
+  }
+
+  async deleteProject(id: string): Promise<boolean> {
+    const { rows } = await this.pool.query("SELECT slug FROM projects WHERE id = $1", [id]);
+    if (rows.length === 0) return false;
+
+    const slug = rows[0].slug;
+    await this.pool.query("DELETE FROM memories WHERE project_id = $1", [slug]);
+    await this.pool.query("DELETE FROM categories WHERE project_id = $1", [slug]);
+    await this.pool.query("DELETE FROM projects WHERE id = $1", [id]);
+    return true;
+  }
+
+  // ── Row mappers ──
+
+  private rowToMemory(row: Record<string, unknown>): Memory {
+    return {
+      id: row.id as string,
+      key: row.key as string,
+      content: row.content as string,
+      category: row.category as string,
+      importance: row.importance as Memory["importance"],
+      tags: (row.tags as string[]) ?? [],
+      metadata: (row.metadata as Record<string, unknown>) ?? {},
+      projectId: (row.project_id as string) ?? undefined,
+      isGlobal: row.is_global as boolean,
+      createdAt: new Date(row.created_at as string),
+      updatedAt: new Date(row.updated_at as string),
+      accessedAt: new Date(row.accessed_at as string),
+      accessCount: row.access_count as number,
+      tokenCount: row.token_count as number,
+      version: row.version as number,
+    };
+  }
+
+  private rowToUser(row: Record<string, unknown>): User {
+    return {
+      id: row.id as string,
+      email: row.email as string,
+      name: row.name as string,
+      createdAt: new Date(row.created_at as string),
+      updatedAt: new Date(row.updated_at as string),
+    };
+  }
+
+  private rowToApiKey(row: Record<string, unknown>): ApiKey {
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      keyHash: row.key_hash as string,
+      prefix: row.prefix as string,
+      userId: row.user_id as string,
+      createdAt: new Date(row.created_at as string),
+      lastUsedAt: row.last_used_at ? new Date(row.last_used_at as string) : undefined,
+      expiresAt: row.expires_at ? new Date(row.expires_at as string) : undefined,
+    };
+  }
+
+  private rowToCategory(row: Record<string, unknown>): Category {
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      description: row.description as string,
+      color: row.color as string,
+      icon: (row.icon as string) ?? undefined,
+      projectId: (row.project_id as string) ?? undefined,
+      isSystem: row.is_system as boolean,
+      isAiGenerated: row.is_ai_generated as boolean,
+      createdAt: new Date(row.created_at as string),
+    };
+  }
+
+  private rowToProject(row: Record<string, unknown>): Project {
+    return {
+      id: row.id as string,
+      name: row.name as string,
+      slug: row.slug as string,
+      description: row.description as string,
+      userId: row.user_id as string,
+      createdAt: new Date(row.created_at as string),
+      updatedAt: new Date(row.updated_at as string),
+    };
+  }
+}
