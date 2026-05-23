@@ -1793,9 +1793,20 @@ code {
   color: var(--success);
 }
 
-.api-key-actions {
+.apikeys-toolbar {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.apikeys-toolbar .filter-search {
+  flex: 1;
+}
+
+.apikeys-toolbar .btn-primary {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* Connection status in sidebar-bottom */
