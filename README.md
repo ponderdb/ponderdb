@@ -693,12 +693,12 @@ npm run clean        # Remove build artifacts
 - [x] Team/shared memories (teams, members, roles, shared projects)
 - [ ] Hosted service at ponderdb.dev
 
-### Phase 3 — Polish (in progress)
+### Phase 3 — Polish ✅
 - [x] Memory versioning and history (auto-snapshot on update, restore to any version)
 - [x] Import from CLAUDE.md, .cursorrules, etc. (parse + import via API/CLI/MCP)
 - [x] Python SDK (`pip install ponderdb`)
-- [ ] VS Code extension
-- [ ] Browser extension
+- [x] VS Code extension (remember selection, search, list, import)
+- [x] Browser extension (Chrome — right-click save, popup config)
 
 ### Phase 4 — Scale
 - [ ] Multi-region deployment

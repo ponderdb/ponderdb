@@ -1,0 +1,79 @@
+{
+  "name": "ponderdb",
+  "displayName": "PonderDB",
+  "description": "AI memory management — search, store, and recall project knowledge from VS Code",
+  "version": "0.2.1",
+  "publisher": "ponderdb",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["ai", "memory", "mcp", "knowledge", "context"],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ponderdb.remember",
+        "title": "PonderDB: Remember Selection"
+      },
+      {
+        "command": "ponderdb.search",
+        "title": "PonderDB: Search Memories"
+      },
+      {
+        "command": "ponderdb.list",
+        "title": "PonderDB: List Memories"
+      },
+      {
+        "command": "ponderdb.importFile",
+        "title": "PonderDB: Import Current File"
+      }
+    ],
+    "configuration": {
+      "title": "PonderDB",
+      "properties": {
+        "ponderdb.serverUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:7437",
+          "description": "PonderDB server URL"
+        },
+        "ponderdb.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "PonderDB API key (pndr_...)"
+        },
+        "ponderdb.projectId": {
+          "type": "string",
+          "default": "",
+          "description": "Default project ID"
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "ponderdb.remember",
+          "group": "ponderdb",
+          "when": "editorHasSelection"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "npm run build -- --watch",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.21.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ponderdb/ponderdb.git",
+    "directory": "packages/vscode-extension"
+  },
+  "license": "MIT"
+}
