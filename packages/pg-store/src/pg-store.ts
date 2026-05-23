@@ -113,11 +113,15 @@ export class PgStore implements StorageAdapter {
           slug TEXT NOT NULL,
           description TEXT NOT NULL DEFAULT '',
           user_id TEXT NOT NULL DEFAULT 'local',
+          team_id TEXT,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           UNIQUE(slug, user_id)
         )
       `);
+
+      // Migration: add team_id if missing
+      await client.query("ALTER TABLE projects ADD COLUMN IF NOT EXISTS team_id TEXT");
 
       await client.query(`
         CREATE TABLE IF NOT EXISTS api_keys (
