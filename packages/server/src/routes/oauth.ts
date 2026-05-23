@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { setCookie } from "hono/cookie";
+import { setCookie, getCookie } from "hono/cookie";
 import type { StorageAdapter } from "@ponderdb/core";
-import { signToken } from "../auth/jwt.js";
+import { signToken, verifyToken } from "../auth/jwt.js";
 import {
   getOAuthConfig,
   googleAuthUrl,
@@ -110,13 +110,18 @@ export function oauthRouter(store: StorageAdapter) {
   // ── Session ──
 
   router.get("/me", async (c) => {
-    // Check JWT cookie or API key
-    const userId = (c.get as (key: string) => string | undefined)("userId");
-    if (!userId) {
+    // Verify JWT cookie directly (this route is outside auth middleware)
+    const sessionToken = getCookie(c, SESSION_COOKIE);
+    if (!sessionToken) {
       return c.json({ authenticated: false }, 401);
     }
 
-    const user = await store.getUserById(userId);
+    const payload = await verifyToken(sessionToken);
+    if (!payload) {
+      return c.json({ authenticated: false }, 401);
+    }
+
+    const user = await store.getUserById(payload.userId);
     if (!user) {
       return c.json({ authenticated: false }, 401);
     }
