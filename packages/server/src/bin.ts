@@ -82,7 +82,7 @@ async function main() {
 
     const app = createApp({ store, embedder, apiKeyRequired });
 
-    const server = serve({ fetch: app.fetch, port, hostname: host }, () => {
+    serve({ fetch: app.fetch, port, hostname: host }, () => {
       console.log(`PonderDB server running at http://${host}:${port}`);
       console.log(`Data directory: ${dataDir}`);
       console.log(`Auth: ${apiKeyRequired ? "enabled" : "disabled"}`);
