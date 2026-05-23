@@ -13,7 +13,7 @@ export function createCli() {
   program
     .name("ponder")
     .description("PonderDB — Universal AI Agent Memory")
-    .version("0.1.0");
+    .version("0.2.1");
 
   program
     .command("remember")

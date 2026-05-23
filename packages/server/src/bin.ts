@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { serve } from "@hono/node-server";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { SqliteStore } from "@ponderdb/sqlite-store";
@@ -6,6 +7,7 @@ import { createApp } from "./app.js";
 import { createMcpServer } from "./mcp.js";
 import { TransformerEmbeddingProvider } from "./embedder/transformer.js";
 import { LocalEmbeddingProvider } from "./embedder/local.js";
+import { OpenAIEmbeddingProvider } from "./embedder/openai.js";
 
 const mode = process.argv[2] ?? "http";
 
@@ -14,20 +16,27 @@ async function main() {
   const port = Number(process.env.PONDER_PORT ?? DEFAULT_CONFIG.port);
   const host = process.env.PONDER_HOST ?? DEFAULT_CONFIG.host;
 
-  // Initialize storage
-  const store = new SqliteStore(dataDir);
-  await store.init();
-
-  // Initialize embedder — real transformer model, falls back to hash-based
+  // Initialize embedder first (need dimensions for store)
   let embedder;
-  if (process.env.PONDER_EMBEDDER === "local") {
+  const embedderType = process.env.PONDER_EMBEDDER ?? "transformer";
+
+  if (embedderType === "openai") {
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (!openaiKey) {
+      console.error("PONDER_EMBEDDER=openai requires OPENAI_API_KEY");
+      process.exit(1);
+    }
+    const model = process.env.PONDER_EMBEDDING_MODEL ?? "text-embedding-3-small";
+    const dims = Number(process.env.PONDER_EMBEDDING_DIMS ?? 1536);
+    embedder = new OpenAIEmbeddingProvider(openaiKey, model, dims);
+    console.log(`Embedder: OpenAI ${model} (${dims}d)`);
+  } else if (embedderType === "local") {
     embedder = new LocalEmbeddingProvider();
     console.log("Embedder: hash-based (local placeholder)");
   } else {
     console.log("Embedder: all-MiniLM-L6-v2 (loading model...)");
     try {
       embedder = new TransformerEmbeddingProvider(dataDir);
-      // Warm up — triggers model download on first run
       await embedder.embed("warmup");
       console.log("Embedder: all-MiniLM-L6-v2 (ready)");
     } catch (err) {
@@ -35,6 +44,10 @@ async function main() {
       embedder = new LocalEmbeddingProvider();
     }
   }
+
+  // Initialize storage (uses embedder dimensions for vector table)
+  const store = new SqliteStore(dataDir, embedder.dimensions());
+  await store.init();
 
   if (mode === "mcp") {
     // MCP stdio mode — used by Claude, Cursor, Copilot, etc.

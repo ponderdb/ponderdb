@@ -40,7 +40,7 @@ export function createApp(deps: AppDeps) {
   }
 
   // Health check
-  app.get("/health", (c) => c.json({ status: "ok", version: "0.1.1" }));
+  app.get("/health", (c) => c.json({ status: "ok", version: "0.2.1" }));
 
   // MCP over HTTP (auth via API key, sessions managed by MCP protocol)
   app.route("/mcp", mcpHttpRouter(deps));
@@ -51,9 +51,11 @@ export function createApp(deps: AppDeps) {
   app.route("/api/categories", categoriesRouter(deps));
   app.route("/api/projects", projectsRouter(deps));
 
-  // Dashboard static files
+  // Dashboard static files — check bundled location first, then monorepo location
   const __dirname = dirname(fileURLToPath(import.meta.url));
-  const dashboardDist = resolve(__dirname, "../../dashboard/dist");
+  const bundledDashboard = resolve(__dirname, "../public");
+  const monorepoDashboard = resolve(__dirname, "../../dashboard/dist");
+  const dashboardDist = existsSync(bundledDashboard) ? bundledDashboard : monorepoDashboard;
   if (existsSync(dashboardDist)) {
     app.use("/*", serveStatic({ root: dashboardDist, rewriteRequestPath: (path) => path }));
     // SPA fallback — serve index.html for non-API routes

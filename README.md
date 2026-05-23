@@ -615,7 +615,10 @@ Environment variables or `.env` file:
 | `PONDER_DATA_DIR` | `~/.ponderdb` | Data directory (SQLite DB stored here) |
 | `PONDER_API_KEY_REQUIRED` | `true` | Require API key for REST API |
 | `PONDER_PROJECT_ID` | _(none)_ | Default project ID for MCP operations |
-| `PONDER_EMBEDDER` | `transformer` | Embedding provider (`transformer` or `local`) |
+| `PONDER_EMBEDDER` | `transformer` | Embedding provider (`transformer`, `openai`, or `local`) |
+| `OPENAI_API_KEY` | _(none)_ | OpenAI API key (required when embedder is `openai`) |
+| `PONDER_EMBEDDING_MODEL` | `text-embedding-3-small` | OpenAI model name |
+| `PONDER_EMBEDDING_DIMS` | `1536` | Embedding dimensions (must match model) |
 
 ---
 
@@ -666,7 +669,7 @@ npm run clean        # Remove build artifacts
 - [x] Project scoping (`projectId` across all layers)
 - [x] Global memories (`isGlobal` — accessible across all projects)
 - [x] Custom styled dashboard (full-width layout, custom dropdowns, setup screen)
-- [ ] Real embedding models (BGE / OpenAI)
+- [x] OpenAI embedding support (`text-embedding-3-small` via API)
 - [ ] npm publish (`@ponderdb/server`, `@ponderdb/cli`, `@ponderdb/sdk`)
 
 ### Phase 2 — Cloud (in progress)
