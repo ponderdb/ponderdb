@@ -217,6 +217,20 @@ export const SYSTEM_CATEGORIES: { name: string; description: string; color: stri
   { name: "custom", description: "Uncategorized memories", color: "#64748b" },
 ];
 
+/** Memory version (historical snapshot) */
+export interface MemoryVersion {
+  id: string;
+  memoryId: string;
+  content: string;
+  category: string;
+  importance: MemoryImportance;
+  tags: string[];
+  metadata: Record<string, unknown>;
+  version: number;
+  changedAt: Date;
+  changedBy?: string;
+}
+
 /** Sync types */
 export interface SyncManifest {
   memories: SyncEntry[];

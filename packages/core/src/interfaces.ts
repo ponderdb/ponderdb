@@ -17,6 +17,7 @@ import type {
   User,
   CreateUserInput,
   UpdateUserInput,
+  MemoryVersion,
   Team,
   TeamMember,
   TeamRole,
@@ -60,6 +61,12 @@ export interface StorageAdapter {
 
   /** Record an access (bump accessedAt + accessCount) */
   recordAccess(id: MemoryId): Promise<void>;
+
+  /** Get version history for a memory */
+  getMemoryHistory(memoryId: MemoryId): Promise<MemoryVersion[]>;
+
+  /** Restore a memory to a specific version */
+  restoreMemoryVersion(memoryId: MemoryId, versionNumber: number): Promise<Memory>;
 
   // ── Users ──
 
