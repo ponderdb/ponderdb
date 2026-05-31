@@ -1,6 +1,6 @@
 {
   "name": "@ponderdb/server",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "PonderDB server — Hono REST API + MCP server",
   "type": "module",
   "main": "./dist/index.js",
