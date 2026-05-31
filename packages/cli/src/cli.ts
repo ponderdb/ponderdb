@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { PonderClient } from "@ponderdb/sdk";
 
+const VERSION = "0.3.0";
+
 function getClient(): PonderClient {
   const baseUrl = process.env.PONDER_URL ?? "http://127.0.0.1:7437";
   const apiKey = process.env.PONDER_API_KEY;
@@ -15,7 +17,9 @@ export function createCli() {
   program
     .name("ponder")
     .description("PonderDB — Universal AI Agent Memory")
-    .version("0.2.1");
+    .version(VERSION, "-v, --version", "Show PonderDB CLI version");
+
+  // ── remember ─────────────────────────────────────────────────────────
 
   program
     .command("remember")
@@ -42,6 +46,8 @@ export function createCli() {
       console.log(`Remembered: ${memory.key} [${memory.category}]${scope}`);
     });
 
+  // ── recall ───────────────────────────────────────────────────────────
+
   program
     .command("recall")
     .description("Retrieve a memory by key")
@@ -60,6 +66,8 @@ export function createCli() {
       console.log(`\nTags: ${memory.tags.join(", ") || "none"}`);
       console.log(`Updated: ${memory.updatedAt}`);
     });
+
+  // ── search ───────────────────────────────────────────────────────────
 
   program
     .command("search")
@@ -88,6 +96,8 @@ export function createCli() {
       }
     });
 
+  // ── list ─────────────────────────────────────────────────────────────
+
   program
     .command("list")
     .description("List memories")
@@ -109,6 +119,36 @@ export function createCli() {
       }
     });
 
+  // ── update ───────────────────────────────────────────────────────────
+
+  program
+    .command("update")
+    .description("Update an existing memory")
+    .argument("<key>", "Memory key to update")
+    .option("-C, --content <content>", "New content")
+    .option("-c, --category <category>", "New category")
+    .option("-i, --importance <importance>", "New importance level")
+    .option("-t, --tags <tags>", "New comma-separated tags")
+    .option("-p, --project <projectId>", "Project ID")
+    .action(async (key: string, opts) => {
+      const updates: Record<string, unknown> = {};
+      if (opts.content) updates.content = opts.content;
+      if (opts.category) updates.category = opts.category;
+      if (opts.importance) updates.importance = opts.importance;
+      if (opts.tags) updates.tags = opts.tags.split(",").map((t: string) => t.trim());
+
+      if (Object.keys(updates).length === 0) {
+        console.log("Nothing to update. Use --content, --category, --importance, or --tags.");
+        process.exit(1);
+      }
+
+      const client = getClient();
+      const memory = await client.update(key, updates, opts.project);
+      console.log(`Updated: ${memory.key} [${memory.category}]`);
+    });
+
+  // ── forget ───────────────────────────────────────────────────────────
+
   program
     .command("forget")
     .description("Delete a memory")
@@ -120,6 +160,226 @@ export function createCli() {
       console.log(`Forgotten: ${key}`);
     });
 
+  // ── history ──────────────────────────────────────────────────────────
+
+  program
+    .command("history")
+    .description("View version history of a memory")
+    .argument("<key>", "Memory key")
+    .option("-p, --project <projectId>", "Project ID")
+    .action(async (key: string, opts) => {
+      const client = getClient();
+      const result = await client.history(key, opts.project);
+
+      console.log(`\nCurrent: ${result.current.key} [${result.current.category}]`);
+      console.log(`Updated: ${result.current.updatedAt}\n`);
+
+      const history = result.history as { version: number; content: string; updatedAt: string }[];
+      if (history.length === 0) {
+        console.log("No previous versions.");
+        return;
+      }
+
+      console.log(`${history.length} version(s):\n`);
+      for (const h of history) {
+        console.log(`  v${h.version}  ${h.updatedAt}`);
+        console.log(`    ${h.content.slice(0, 100)}${h.content.length > 100 ? "..." : ""}`);
+      }
+    });
+
+  // ── restore ──────────────────────────────────────────────────────────
+
+  program
+    .command("restore")
+    .description("Restore a memory to a previous version")
+    .argument("<key>", "Memory key")
+    .argument("<version>", "Version number to restore")
+    .option("-p, --project <projectId>", "Project ID")
+    .action(async (key: string, version: string, opts) => {
+      const client = getClient();
+      const memory = await client.restore(key, Number(version), opts.project);
+      console.log(`Restored: ${memory.key} to version ${version}`);
+    });
+
+  // ── export ───────────────────────────────────────────────────────────
+
+  program
+    .command("export")
+    .description("Export all memories as JSON or Markdown")
+    .option("-f, --format <format>", "Output format: json or markdown", "json")
+    .option("-p, --project <projectId>", "Project ID")
+    .option("-c, --category <category>", "Filter by category")
+    .option("-o, --output <file>", "Write to file instead of stdout")
+    .action(async (opts) => {
+      const client = getClient();
+      const result = await client.list({
+        limit: 10000,
+        projectId: opts.project,
+        category: opts.category,
+        sortBy: "updatedAt",
+        sortOrder: "desc",
+      });
+
+      let output: string;
+
+      if (opts.format === "markdown") {
+        const lines: string[] = [
+          `# PonderDB Export`,
+          ``,
+          `> ${result.total} memories exported on ${new Date().toISOString()}`,
+          ``,
+        ];
+
+        let currentCategory = "";
+        for (const m of result.items) {
+          if (m.category !== currentCategory) {
+            currentCategory = m.category;
+            lines.push(`## ${currentCategory}`, ``);
+          }
+          lines.push(`### ${m.key}`);
+          lines.push(``);
+          if (m.tags.length) lines.push(`**Tags:** ${m.tags.join(", ")}`);
+          lines.push(`**Importance:** ${m.importance} | **Updated:** ${m.updatedAt}`);
+          lines.push(``);
+          lines.push(m.content);
+          lines.push(``);
+          lines.push(`---`);
+          lines.push(``);
+        }
+        output = lines.join("\n");
+      } else {
+        output = JSON.stringify({ exported: new Date().toISOString(), total: result.total, memories: result.items }, null, 2);
+      }
+
+      if (opts.output) {
+        const { writeFileSync } = await import("node:fs");
+        writeFileSync(opts.output, output);
+        console.log(`Exported ${result.total} memories to ${opts.output}`);
+      } else {
+        console.log(output);
+      }
+    });
+
+  // ── projects ─────────────────────────────────────────────────────────
+
+  const projects = program
+    .command("projects")
+    .description("Manage projects");
+
+  projects
+    .command("list")
+    .description("List all projects")
+    .action(async () => {
+      const client = getClient();
+      const result = await client.listProjects() as { projects: { name: string; slug: string; description?: string; memoryCount: number }[] };
+
+      if (result.projects.length === 0) {
+        console.log("No projects found.");
+        return;
+      }
+
+      console.log(`${result.projects.length} project(s):\n`);
+      for (const p of result.projects) {
+        console.log(`  ${p.slug}  "${p.name}"  (${p.memoryCount} memories)`);
+        if (p.description) console.log(`    ${p.description}`);
+      }
+    });
+
+  projects
+    .command("create")
+    .description("Create a new project")
+    .argument("<name>", "Project name")
+    .option("-s, --slug <slug>", "URL-friendly slug")
+    .option("-d, --description <desc>", "Project description")
+    .action(async (name: string, opts) => {
+      const client = getClient();
+      const project = await client.createProject(name, {
+        slug: opts.slug,
+        description: opts.description,
+      }) as { slug: string };
+      console.log(`Created project: ${project.slug}`);
+    });
+
+  projects
+    .command("delete")
+    .description("Delete a project and all its memories")
+    .argument("<id>", "Project ID")
+    .action(async (id: string) => {
+      const client = getClient();
+      await client.deleteProject(id);
+      console.log(`Deleted project: ${id}`);
+    });
+
+  // ── categories ───────────────────────────────────────────────────────
+
+  program
+    .command("categories")
+    .description("List categories with memory counts")
+    .option("-p, --project <projectId>", "Project ID")
+    .action(async (opts) => {
+      const client = getClient();
+      const result = await client.listCategories(opts.project) as { categories: { name: string; count: number; isSystem: boolean; description?: string }[] };
+
+      if (result.categories.length === 0) {
+        console.log("No categories found.");
+        return;
+      }
+
+      console.log(`${result.categories.length} categories:\n`);
+      for (const cat of result.categories) {
+        const badge = cat.isSystem ? "" : " [custom]";
+        console.log(`  ${cat.name}${badge}  (${cat.count} memories)`);
+        if (cat.description) console.log(`    ${cat.description}`);
+      }
+    });
+
+  // ── keys ─────────────────────────────────────────────────────────────
+
+  const keys = program
+    .command("keys")
+    .description("Manage API keys");
+
+  keys
+    .command("list")
+    .description("List API keys (prefix only)")
+    .action(async () => {
+      const client = getClient();
+      const result = await client.listApiKeys() as { keys: { id: string; name: string; prefix: string; createdAt: string }[] };
+
+      if (result.keys.length === 0) {
+        console.log("No API keys found.");
+        return;
+      }
+
+      console.log(`${result.keys.length} API key(s):\n`);
+      for (const k of result.keys) {
+        console.log(`  ${k.prefix}...  "${k.name}"  (created: ${k.createdAt})`);
+      }
+    });
+
+  keys
+    .command("create")
+    .description("Create a new API key")
+    .argument("<name>", "Key name (e.g. 'laptop', 'ci-server')")
+    .action(async (name: string) => {
+      const client = getClient();
+      const result = await client.createApiKey(name) as { key: string; prefix: string; message: string };
+      console.log(`\nAPI Key created: ${result.key}`);
+      console.log(`\n  ${result.message}`);
+    });
+
+  keys
+    .command("delete")
+    .description("Delete an API key")
+    .argument("<id>", "Key ID")
+    .action(async (id: string) => {
+      const client = getClient();
+      await client.deleteApiKey(id);
+      console.log(`Deleted API key: ${id}`);
+    });
+
+  // ── stats ────────────────────────────────────────────────────────────
+
   program
     .command("stats")
     .description("Show memory stats")
@@ -129,6 +389,8 @@ export function createCli() {
       console.log(`Total memories: ${stats.total}`);
       console.log(`Server: ${stats.version}`);
     });
+
+  // ── sync ─────────────────────────────────────────────────────────────
 
   program
     .command("sync")
@@ -145,12 +407,13 @@ export function createCli() {
         return;
       }
 
-      // Pull changes from cloud
       console.log("Pulling from cloud...");
       const pulled = await client.syncPull(null);
       console.log(`  ${pulled.memories.length} memories, ${pulled.projects.length} projects`);
       console.log(`Synced at: ${pulled.syncedAt}`);
     });
+
+  // ── import ───────────────────────────────────────────────────────────
 
   program
     .command("import")
@@ -164,7 +427,6 @@ export function createCli() {
       const client = getClient();
 
       if (opts.dryRun) {
-        // Use preview endpoint
         const res = await client.importPreview(content, source);
         console.log(`Would import ${res.count} memories from ${file}:\n`);
         for (const m of res.memories) {
