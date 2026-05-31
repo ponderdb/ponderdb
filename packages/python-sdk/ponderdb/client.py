@@ -201,6 +201,104 @@ class PonderClient:
         """Get sync overview."""
         return self._request("GET", "/api/sync/status")
 
+    # ── Update ──
+
+    def update(
+        self,
+        key: str,
+        *,
+        content: Optional[str] = None,
+        category: Optional[str] = None,
+        importance: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+        project_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Update an existing memory."""
+        body: dict[str, Any] = {}
+        if content is not None:
+            body["content"] = content
+        if category is not None:
+            body["category"] = category
+        if importance is not None:
+            body["importance"] = importance
+        if tags is not None:
+            body["tags"] = tags
+        pid = project_id or self._default_project_id
+        params = {"projectId": pid} if pid else {}
+        return self._request("PUT", f"/api/memories/{key}", json=body, params=params)
+
+    # ── Projects ──
+
+    def list_projects(self) -> dict[str, Any]:
+        """List all projects."""
+        return self._request("GET", "/api/projects")
+
+    def create_project(
+        self,
+        name: str,
+        *,
+        slug: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Create a new project."""
+        body: dict[str, Any] = {"name": name}
+        if slug:
+            body["slug"] = slug
+        if description:
+            body["description"] = description
+        return self._request("POST", "/api/projects", json=body)
+
+    def delete_project(self, project_id: str) -> dict[str, Any]:
+        """Delete a project and all its memories."""
+        return self._request("DELETE", f"/api/projects/{project_id}")
+
+    # ── Categories ──
+
+    def list_categories(self, project_id: Optional[str] = None) -> dict[str, Any]:
+        """List categories with memory counts."""
+        pid = project_id or self._default_project_id
+        params = {"projectId": pid} if pid else {}
+        return self._request("GET", "/api/categories", params=params)
+
+    # ── API Keys ──
+
+    def list_api_keys(self) -> dict[str, Any]:
+        """List API keys (prefix only, no secrets)."""
+        return self._request("GET", "/api/auth/keys")
+
+    def create_api_key(self, name: str) -> dict[str, Any]:
+        """Create a new API key. Save the returned key — it won't be shown again."""
+        return self._request("POST", "/api/auth/keys", json={"name": name})
+
+    def delete_api_key(self, key_id: str) -> dict[str, Any]:
+        """Delete an API key."""
+        return self._request("DELETE", f"/api/auth/keys/{key_id}")
+
+    # ── Health ──
+
+    def health(self) -> dict[str, Any]:
+        """Check server health and version."""
+        return self._request("GET", "/health")
+
+    # ── Export ──
+
+    def export(
+        self,
+        *,
+        project_id: Optional[str] = None,
+        category: Optional[str] = None,
+        limit: int = 10000,
+    ) -> list[dict[str, Any]]:
+        """Export all memories as a list of dicts."""
+        result = self.list(
+            project_id=project_id,
+            category=category,
+            limit=limit,
+            sort_by="updatedAt",
+            sort_order="desc",
+        )
+        return result.get("items", [])
+
     # ── Stats ──
 
     def stats(self) -> dict[str, Any]:
