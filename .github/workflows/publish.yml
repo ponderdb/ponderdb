@@ -22,8 +22,6 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - run: npm ci
-      - run: npm run lint
-      - run: npm run build
 
       # Determine version bump type from commit messages
       # "feat:" = minor, "fix:" = patch, "BREAKING CHANGE" = major
@@ -42,8 +40,9 @@ jobs:
           fi
           echo "Bump type: $(grep type $GITHUB_OUTPUT | cut -d= -f2)"
 
-      # Bump version in all packages
+      # Bump version in all packages BEFORE building
       - name: Bump versions
+        id: version
         run: |
           BUMP=${{ steps.bump.outputs.type }}
 
@@ -62,22 +61,37 @@ jobs:
           echo "Bumping $CURRENT -> $NEW_VERSION ($BUMP)"
 
           # Update all package versions
-          for pkg in core sqlite-store server sdk cli; do
+          for pkg in core sqlite-store pg-store server sdk cli; do
             sed -i "s/\"version\": \"$CURRENT\"/\"version\": \"$NEW_VERSION\"/" packages/$pkg/package.json
           done
 
           # Update internal dependency versions
-          sed -i "s/\"@ponderdb\/core\": \"$CURRENT\"/\"@ponderdb\/core\": \"$NEW_VERSION\"/" packages/sqlite-store/package.json packages/server/package.json packages/sdk/package.json
+          sed -i "s/\"@ponderdb\/core\": \"$CURRENT\"/\"@ponderdb\/core\": \"$NEW_VERSION\"/" packages/sqlite-store/package.json packages/pg-store/package.json packages/server/package.json packages/sdk/package.json
           sed -i "s/\"@ponderdb\/sqlite-store\": \"$CURRENT\"/\"@ponderdb\/sqlite-store\": \"$NEW_VERSION\"/" packages/server/package.json
+          sed -i "s/\"@ponderdb\/pg-store\": \"$CURRENT\"/\"@ponderdb\/pg-store\": \"$NEW_VERSION\"/" packages/server/package.json
           sed -i "s/\"@ponderdb\/sdk\": \"$CURRENT\"/\"@ponderdb\/sdk\": \"$NEW_VERSION\"/" packages/cli/package.json
 
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      # Reinstall so workspace symlinks resolve with new versions
+      - name: Reinstall dependencies
+        run: npm install --ignore-scripts
+
+      # Lint and build AFTER version bump + reinstall
+      - run: npm run lint
+      - name: Build in dependency order
+        run: |
+          npm run build -w @ponderdb/core
+          npm run build -w @ponderdb/sqlite-store -w @ponderdb/pg-store -w @ponderdb/sdk
+          npm run build -w @ponderdb/server -w @ponderdb/cli
+          npm run build --workspaces --if-present
 
       # Publish all packages in dependency order
       - name: Publish to npm
         run: |
           npm publish --workspace=@ponderdb/core --access public
           npm publish --workspace=@ponderdb/sqlite-store --access public
+          npm publish --workspace=@ponderdb/pg-store --access public
           npm publish --workspace=@ponderdb/sdk --access public
           npm publish --workspace=@ponderdb/server --access public
           npm publish --workspace=@ponderdb/cli --access public
@@ -87,15 +101,14 @@ jobs:
       # Commit version bump and tag
       - name: Commit and tag
         run: |
-          NEW_VERSION=${{ steps.bump.outputs.version || '0.0.0' }}
-          # Re-read in case step output didn't work
-          if [ "$NEW_VERSION" = "0.0.0" ]; then
+          NEW_VERSION=${{ steps.version.outputs.version }}
+          if [ -z "$NEW_VERSION" ] || [ "$NEW_VERSION" = "" ]; then
             NEW_VERSION=$(node -p "require('./packages/core/package.json').version")
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add packages/*/package.json
+          git add packages/*/package.json package-lock.json
           git commit -m "chore: release v${NEW_VERSION}" || true
           git tag "v${NEW_VERSION}"
           git push
