@@ -49,11 +49,14 @@ ChatGPT ─┘
 - **Cross-tool memory** — Claude, Cursor, Copilot, ChatGPT, Gemini CLI, JetBrains all share the same memory via MCP
 - **Developer-specific** — Optimized for code patterns, architecture decisions, bug fixes, configs, workflows
 - **Local-first** — Data stays on your machine. No internet required. No cloud dependency.
-- **Semantic search** — Find memories by meaning, not just keywords
+- **Semantic search** — Find memories by meaning using transformer or OpenAI embeddings + sqlite-vec
 - **Auto-categorized** — Memories tagged as `architecture`, `bug`, `pattern`, `config`, `decision`, `snippet`, etc.
+- **Project scoping** — Organize memories into projects. Global memories accessible across all projects.
+- **Multi-user ready** — User accounts with scoped data (local user by default, OAuth coming in Phase 2)
+- **Flexible embeddings** — Local transformer (all-MiniLM-L6-v2), OpenAI (`text-embedding-3-small`), or hash-based fallback
 - **Secure by default** — API key auth for REST API, auto-generated on first start
 - **MCP native** — Works with any MCP-compatible tool out of the box (stdio + HTTP)
-- **Web dashboard** — Browse memories, search, manage API keys at `localhost:7437`
+- **Web dashboard** — Browse memories, manage projects, categories, API keys at `localhost:7437`
 
 ---
 
@@ -210,12 +213,20 @@ Once connected, your AI tool automatically gets these tools:
 
 | Tool | Description | Example |
 |------|-------------|---------|
-| `remember` | Store a memory (auto-categorized, with embeddings) | "Remember that auth uses JWT RS256" |
+| `remember` | Store a memory (auto-categorized, with embeddings, optional `isGlobal`) | "Remember that auth uses JWT RS256" |
 | `recall` | Retrieve a specific memory by key | "Recall the JWT config" |
-| `search_memories` | Semantic + keyword hybrid search | "Search for anything about authentication" |
+| `search_memories` | Semantic + keyword hybrid search (includes global memories) | "Search for anything about authentication" |
 | `forget` | Delete a memory | "Forget the old deploy process" |
-| `list_memories` | List memories with optional filters | "List all architecture decisions" |
+| `list_memories` | List memories with optional filters (includes global memories) | "List all architecture decisions" |
 | `list_categories` | List all categories (system + custom) with counts | "What categories exist?" |
+| `create_category` | Create a custom memory category | "Create a category called api-notes" |
+| `update_category` | Update a custom category's name, description, or color | "Rename category api-notes to api-docs" |
+| `delete_category` | Delete a custom category (memories reassigned to `custom`) | "Delete the api-notes category" |
+| `list_projects` | List all memory projects | "What projects exist?" |
+| `create_project` | Create a new project to organize memories | "Create a project called My Backend API" |
+| `update_project` | Update a project's name or description | "Update the backend project description" |
+| `delete_project` | Delete a project and all its memories (requires confirmation) | "Delete the old-project project" |
+| `tag_memory` | Add or remove tags on an existing memory | "Add tags auth and security to auth/jwt" |
 
 The AI tool decides when to remember and recall. You don't need to do anything manually — just use your AI tool normally and it will build up project memory over time.
 
@@ -322,9 +333,25 @@ Set `PONDER_PROJECT_ID` in your MCP config to scope all AI tool operations to a 
 }
 ```
 
-**Any MCP client** — add `PONDER_PROJECT_ID` to the `env` block. All `remember`, `recall`, `search_memories`, `forget`, and `list_memories` calls will be scoped to that project automatically.
+**Any MCP client (stdio)** — add `PONDER_PROJECT_ID` to the `env` block. All `remember`, `recall`, `search_memories`, `forget`, and `list_memories` calls will be scoped to that project automatically.
 
-> **Without `PONDER_PROJECT_ID`:** Tools can still pass `projectId` per-call. If neither is set, memories are stored globally (no project scope).
+**HTTP MCP** — use the `X-Project-ID` header to scope all operations to a project:
+```json
+{
+  "mcpServers": {
+    "ponderdb": {
+      "type": "http",
+      "url": "http://127.0.0.1:7437/mcp",
+      "headers": {
+        "Authorization": "Bearer pndr_YOUR_KEY",
+        "X-Project-ID": "my-backend-api"
+      }
+    }
+  }
+}
+```
+
+> **Priority:** `X-Project-ID` header > `PONDER_PROJECT_ID` env var > per-call `projectId` param. If none set, memories are stored globally (no project scope).
 
 ### Using Project ID with SDK
 
@@ -524,10 +551,12 @@ await ponder.forget("auth/jwt-config");
 ponderdb/
 ├── packages/
 │   ├── core/           — Types, interfaces, storage abstractions, utilities
-│   ├── sqlite-store/   — SQLite + better-sqlite3 storage adapter
+│   ├── sqlite-store/   — SQLite + sqlite-vec storage adapter (local mode)
+│   ├── pg-store/       — PostgreSQL + pgvector storage adapter (cloud mode)
 │   ├── server/         — Hono REST API + MCP server (stdio + HTTP)
 │   ├── dashboard/      — React + Vite web dashboard
 │   ├── sdk/            — TypeScript client SDK
+│   ├── python-sdk/     — Python client SDK
 │   └── cli/            — Terminal interface (ponder command)
 ├── research/           — Design documents and architecture research
 └── assets/             — Logo and branding
@@ -554,10 +583,12 @@ ponderdb/
 │  │  - Generate embeddings    │                    │
 │  │  - Hybrid search          │                    │
 │  └────────────┬─────────────┘                    │
-│  ┌────────────▼─────────────┐                    │
-│  │   SQLite + Embeddings     │                    │
-│  │   ~/.ponderdb/ponder.db   │                    │
-│  └──────────────────────────┘                    │
+│               │                                  │
+│  ┌────────────▼─────────────┐  ┌──────────────┐ │
+│  │   SQLite + sqlite-vec     │  │  Embedder    │ │
+│  │   ~/.ponderdb/ponder.db   │  │  Transformer │ │
+│  │                           │  │  or OpenAI   │ │
+│  └──────────────────────────┘  └──────────────┘ │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -591,7 +622,11 @@ Environment variables or `.env` file:
 | `PONDER_DATA_DIR` | `~/.ponderdb` | Data directory (SQLite DB stored here) |
 | `PONDER_API_KEY_REQUIRED` | `true` | Require API key for REST API |
 | `PONDER_PROJECT_ID` | _(none)_ | Default project ID for MCP operations |
-| `PONDER_EMBEDDER` | `transformer` | Embedding provider (`transformer` or `local`) |
+| `PONDER_EMBEDDER` | `transformer` | Embedding provider (`transformer`, `openai`, or `local`) |
+| `OPENAI_API_KEY` | _(none)_ | OpenAI API key (required when embedder is `openai`) |
+| `PONDER_EMBEDDING_MODEL` | `text-embedding-3-small` | OpenAI model name |
+| `PONDER_EMBEDDING_DIMS` | `1536` | Embedding dimensions (must match model) |
+| `DATABASE_URL` | _(none)_ | PostgreSQL connection string (enables cloud mode) |
 
 ---
 
@@ -617,7 +652,10 @@ npm run clean        # Remove build artifacts
 | Runtime | Node.js >= 22 (LTS) | Stable, native fetch, modern ES |
 | API | [Hono](https://hono.dev) | Ultrafast, lightweight, 14KB |
 | Storage | [SQLite](https://sqlite.org) (better-sqlite3) | Zero config, local-first, reliable |
+| Vector Search | [sqlite-vec](https://github.com/asg017/sqlite-vec) | Native vector similarity in SQLite |
+| Embeddings | [Transformers.js](https://huggingface.co/docs/transformers.js) / [OpenAI](https://platform.openai.com/docs/guides/embeddings) | Local or cloud semantic embeddings |
 | MCP | [@modelcontextprotocol/sdk](https://modelcontextprotocol.io) | Standard protocol for AI tool integration |
+| Dashboard | React 19 + Vite | Modern, fast, light theme |
 | Language | TypeScript 5.x | Type safety across all packages |
 | Linter | ESLint 9 + Prettier | Code quality + consistent formatting |
 | Monorepo | npm workspaces | Simple, no extra tooling |
@@ -626,40 +664,49 @@ npm run clean        # Remove build artifacts
 
 ## Roadmap
 
-### Phase 1 — MVP (current)
+### Phase 1 — MVP ✅
 - [x] Monorepo scaffold with npm workspaces
 - [x] Core types, interfaces, storage abstractions
 - [x] SQLite storage adapter (local-first)
 - [x] Hono REST API server
 - [x] MCP server (stdio transport)
 - [x] MCP over HTTP (Streamable HTTP transport)
-- [x] Web dashboard (memory browser, search, API key management)
+- [x] Web dashboard (memory browser, categories, projects, API key management)
 - [x] API key authentication
 - [x] TypeScript SDK
 - [x] CLI tool
-- [ ] Real embedding models (BGE / OpenAI)
-- [ ] sqlite-vec for native vector search
+- [x] sqlite-vec for native vector search
+- [x] Transformer embeddings (all-MiniLM-L6-v2)
+- [x] Project scoping (`projectId` across all layers)
+- [x] Global memories (`isGlobal` — accessible across all projects)
+- [x] Custom styled dashboard (full-width layout, custom dropdowns, setup screen)
+- [x] OpenAI embedding support (`text-embedding-3-small` via API)
 - [ ] npm publish (`@ponderdb/server`, `@ponderdb/cli`, `@ponderdb/sdk`)
 
-### Phase 2 — Cloud
-- [ ] Cloud sync (local <-> cloud)
-- [ ] PostgreSQL + pgvector storage adapter
-- [ ] User accounts + web auth
-- [ ] Team/shared memories
+### Phase 2 — Cloud (in progress)
+- [x] Multi-user data model (User type, `userId` scoping on projects + API keys)
+- [x] Auth middleware with user context extraction
+- [x] PostgreSQL + pgvector storage adapter (`@ponderdb/pg-store`)
+- [x] Google + GitHub OAuth login
+- [x] JWT session management for web dashboard
+- [x] Cloud sync (local <-> cloud via `/api/sync` endpoints)
+- [x] Team/shared memories (teams, members, roles, shared projects)
 - [ ] Hosted service at ponderdb.dev
 
-### Phase 3 — Polish
-- [ ] VS Code extension
-- [ ] Browser extension
-- [ ] Python SDK
-- [ ] Import from CLAUDE.md, .cursorrules, etc.
-- [ ] Memory versioning and history
+### Phase 3 — Polish ✅
+- [x] Memory versioning and history (auto-snapshot on update, restore to any version)
+- [x] Import from CLAUDE.md, .cursorrules, etc. (parse + import via API/CLI/MCP)
+- [x] Python SDK (`pip install ponderdb`)
+- [x] VS Code extension (remember selection, search, list, import)
+- [x] Browser extension (Chrome — right-click save, popup config)
 
-### Phase 4 — Scale
-- [ ] Multi-region deployment
-- [ ] Enterprise features (SSO, audit logs, zero-knowledge encryption)
-- [ ] Memory marketplace
-- [ ] AI-powered suggestions and auto-learning
+### Phase 4 — Scale ✅
+- [x] Enterprise features (audit logs, API routes for compliance)
+- [x] Memory marketplace (publish, browse, download shared memories)
+- [x] AI-powered suggestions (related memories, stale detection, duplicates)
+- [ ] Multi-region deployment (infra/DevOps)
+- [ ] SSO (SAML/OIDC — enterprise auth)
+- [ ] Zero-knowledge encryption (client-side encryption)
 
 ---
 

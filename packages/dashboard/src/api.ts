@@ -9,6 +9,7 @@ interface Memory {
   tags: string[];
   metadata: Record<string, unknown>;
   projectId?: string;
+  isGlobal: boolean;
   createdAt: string;
   updatedAt: string;
   accessedAt: string;
@@ -34,6 +35,7 @@ interface ApiKeyInfo {
   id: string;
   name: string;
   prefix: string;
+  rawKey?: string;
   createdAt: string;
   lastUsedAt?: string;
 }
@@ -79,11 +81,12 @@ export async function searchMemories(
   query: string,
   category?: string,
   limit = 10,
+  projectId?: string,
 ): Promise<{ results: SearchResult[] }> {
   const res = await fetch(`${BASE}/api/memories/search`, {
     method: "POST",
     headers: headers(apiKey),
-    body: JSON.stringify({ query, category, limit }),
+    body: JSON.stringify({ query, category, limit, projectId }),
   });
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
   return res.json();
@@ -92,8 +95,12 @@ export async function searchMemories(
 export async function getMemory(
   apiKey: string,
   key: string,
+  projectId?: string,
 ): Promise<Memory | null> {
-  const res = await fetch(`${BASE}/api/memories/${encodeURIComponent(key)}`, {
+  const qs = new URLSearchParams();
+  if (projectId) qs.set("projectId", projectId);
+  const query = qs.toString();
+  const res = await fetch(`${BASE}/api/memories/${encodeURIComponent(key)}${query ? `?${query}` : ""}`, {
     headers: headers(apiKey),
   });
   if (res.status === 404) return null;
@@ -101,8 +108,11 @@ export async function getMemory(
   return res.json();
 }
 
-export async function deleteMemory(apiKey: string, key: string) {
-  const res = await fetch(`${BASE}/api/memories/${encodeURIComponent(key)}`, {
+export async function deleteMemory(apiKey: string, key: string, projectId?: string) {
+  const qs = new URLSearchParams();
+  if (projectId) qs.set("projectId", projectId);
+  const query = qs.toString();
+  const res = await fetch(`${BASE}/api/memories/${encodeURIComponent(key)}${query ? `?${query}` : ""}`, {
     method: "DELETE",
     headers: headers(apiKey),
   });
@@ -111,7 +121,7 @@ export async function deleteMemory(apiKey: string, key: string) {
 }
 
 export async function listApiKeys(
-  apiKey: string,
+  apiKey?: string,
 ): Promise<{ keys: ApiKeyInfo[] }> {
   const res = await fetch(`${BASE}/api/auth/keys`, {
     headers: headers(apiKey),
@@ -235,7 +245,7 @@ interface ProjectInfo {
 }
 
 export async function listProjects(
-  apiKey: string,
+  apiKey?: string,
 ): Promise<{ projects: ProjectInfo[] }> {
   const res = await fetch(`${BASE}/api/projects`, {
     headers: headers(apiKey),

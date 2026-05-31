@@ -18,6 +18,7 @@ export interface Memory {
   metadata: Record<string, unknown>;
   embedding?: number[];
   projectId?: string;
+  isGlobal: boolean;
   createdAt: Date;
   updatedAt: Date;
   accessedAt: Date;
@@ -35,6 +36,7 @@ export interface CreateMemoryInput {
   tags?: string[];
   metadata?: Record<string, unknown>;
   projectId?: string;
+  isGlobal?: boolean;
 }
 
 /** Input for updating a memory */
@@ -44,6 +46,7 @@ export interface UpdateMemoryInput {
   importance?: MemoryImportance;
   tags?: string[];
   metadata?: Record<string, unknown>;
+  isGlobal?: boolean;
 }
 
 /** Search query */
@@ -85,12 +88,68 @@ export interface ListMemoriesFilter {
   sortOrder?: "asc" | "desc";
 }
 
+/** Auth provider type */
+export type AuthProvider = "google" | "github" | "local";
+
+/** User account */
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  provider: AuthProvider;
+  providerId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Input for creating a user */
+export interface CreateUserInput {
+  email: string;
+  name: string;
+  provider?: AuthProvider;
+  providerId?: string;
+}
+
+/** Input for updating a user */
+export interface UpdateUserInput {
+  name?: string;
+  email?: string;
+}
+
+/** Team */
+export interface Team {
+  id: string;
+  name: string;
+  slug: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Team membership role */
+export type TeamRole = "owner" | "admin" | "member";
+
+/** Team member */
+export interface TeamMember {
+  userId: string;
+  teamId: string;
+  role: TeamRole;
+  joinedAt: Date;
+  user?: { id: string; email: string; name: string };
+}
+
+/** Input for creating a team */
+export interface CreateTeamInput {
+  name: string;
+  slug?: string;
+}
+
 /** API key */
 export interface ApiKey {
   id: string;
   name: string;
   keyHash: string;
   prefix: string;
+  rawKey?: string;
   userId: string;
   createdAt: Date;
   lastUsedAt?: Date;
@@ -103,6 +162,8 @@ export interface Project {
   name: string;
   slug: string;
   description: string;
+  userId: string;
+  teamId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -163,6 +224,116 @@ export const SYSTEM_CATEGORIES: { name: string; description: string; color: stri
   { name: "dependency", description: "Package versions, library notes", color: "#f97316" },
   { name: "custom", description: "Uncategorized memories", color: "#64748b" },
 ];
+
+/** Memory version (historical snapshot) */
+export interface MemoryVersion {
+  id: string;
+  memoryId: string;
+  content: string;
+  category: string;
+  importance: MemoryImportance;
+  tags: string[];
+  metadata: Record<string, unknown>;
+  version: number;
+  changedAt: Date;
+  changedBy?: string;
+}
+
+/** Audit log entry */
+export interface AuditLogEntry {
+  id: string;
+  userId: string;
+  action: AuditAction;
+  resourceType: "memory" | "project" | "category" | "team" | "api_key" | "user";
+  resourceId: string;
+  details: Record<string, unknown>;
+  ipAddress?: string;
+  userAgent?: string;
+  createdAt: Date;
+}
+
+export type AuditAction =
+  | "create" | "update" | "delete"
+  | "login" | "logout"
+  | "api_key_create" | "api_key_revoke"
+  | "team_create" | "team_delete" | "member_add" | "member_remove"
+  | "import" | "sync_push" | "sync_pull"
+  | "restore_version";
+
+/** Memory marketplace listing */
+export interface MarketplaceListing {
+  id: string;
+  memoryId: string;
+  title: string;
+  description: string;
+  category: string;
+  tags: string[];
+  authorId: string;
+  authorName: string;
+  downloads: number;
+  rating: number;
+  isPublic: boolean;
+  publishedAt: Date;
+  updatedAt: Date;
+}
+
+export interface CreateMarketplaceListingInput {
+  memoryId: string;
+  title: string;
+  description: string;
+  isPublic?: boolean;
+}
+
+/** AI suggestion */
+export interface AiSuggestion {
+  id: string;
+  type: "related_memory" | "missing_knowledge" | "stale_memory" | "duplicate";
+  title: string;
+  description: string;
+  relatedMemoryIds: string[];
+  confidence: number;
+  dismissed: boolean;
+  createdAt: Date;
+}
+
+/** Sync types */
+export interface SyncManifest {
+  memories: SyncEntry[];
+  projects: SyncEntry[];
+  categories: SyncEntry[];
+}
+
+export interface SyncEntry {
+  id: string;
+  updatedAt: string;
+  deleted?: boolean;
+}
+
+export interface SyncPushRequest {
+  memories: Memory[];
+  projects: Project[];
+  categories: Category[];
+  deletedMemoryIds: string[];
+  deletedProjectIds: string[];
+  deletedCategoryIds: string[];
+  lastSyncAt: string | null;
+}
+
+export interface SyncPullResponse {
+  memories: Memory[];
+  projects: Project[];
+  categories: Category[];
+  deletedMemoryIds: string[];
+  deletedProjectIds: string[];
+  deletedCategoryIds: string[];
+  syncedAt: string;
+}
+
+export interface SyncStatus {
+  lastSyncAt: string | null;
+  pendingChanges: number;
+  connected: boolean;
+}
 
 /** Server config */
 export interface PonderConfig {

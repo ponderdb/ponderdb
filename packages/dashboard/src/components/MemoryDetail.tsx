@@ -23,6 +23,7 @@ export function MemoryDetail({ memory, onBack, onDelete }: Props) {
       <div className="detail-meta">
         <span className={`badge cat-${memory.category}`}>{memory.category}</span>
         <span className={`badge imp-${memory.importance}`}>{memory.importance}</span>
+        {memory.isGlobal && <span className="badge badge-global">global</span>}
         {memory.tags.length > 0 && (
           <span className="tags">{memory.tags.map((t) => `#${t}`).join("  ")}</span>
         )}
@@ -35,6 +36,7 @@ export function MemoryDetail({ memory, onBack, onDelete }: Props) {
       <div className="detail-info">
         <div><strong>ID:</strong> {memory.id}</div>
         <div><strong>Project:</strong> {memory.projectId || "—"}</div>
+        <div><strong>Global:</strong> {memory.isGlobal ? "Yes" : "No"}</div>
         <div><strong>Created:</strong> {new Date(memory.createdAt).toLocaleString()}</div>
         <div><strong>Updated:</strong> {new Date(memory.updatedAt).toLocaleString()}</div>
         <div><strong>Last Accessed:</strong> {new Date(memory.accessedAt).toLocaleString()}</div>

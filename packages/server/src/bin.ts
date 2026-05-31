@@ -1,11 +1,15 @@
+#!/usr/bin/env node
 import { serve } from "@hono/node-server";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { SqliteStore } from "@ponderdb/sqlite-store";
+import { PgStore } from "@ponderdb/pg-store";
 import { expandPath, DEFAULT_CONFIG } from "@ponderdb/core";
+import type { StorageAdapter } from "@ponderdb/core";
 import { createApp } from "./app.js";
 import { createMcpServer } from "./mcp.js";
 import { TransformerEmbeddingProvider } from "./embedder/transformer.js";
 import { LocalEmbeddingProvider } from "./embedder/local.js";
+import { OpenAIEmbeddingProvider } from "./embedder/openai.js";
 
 const mode = process.argv[2] ?? "http";
 
@@ -14,26 +18,61 @@ async function main() {
   const port = Number(process.env.PONDER_PORT ?? DEFAULT_CONFIG.port);
   const host = process.env.PONDER_HOST ?? DEFAULT_CONFIG.host;
 
-  // Initialize storage
-  const store = new SqliteStore(dataDir);
-  await store.init();
-
-  // Initialize embedder — real transformer model, falls back to hash-based
+  // Initialize embedder first (need dimensions for store)
   let embedder;
-  if (process.env.PONDER_EMBEDDER === "local") {
+  const embedderType = process.env.PONDER_EMBEDDER ?? "transformer";
+
+  if (embedderType === "openai") {
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (!openaiKey) {
+      console.error("PONDER_EMBEDDER=openai requires OPENAI_API_KEY");
+      process.exit(1);
+    }
+    const model = process.env.PONDER_EMBEDDING_MODEL ?? "text-embedding-3-small";
+    const dims = Number(process.env.PONDER_EMBEDDING_DIMS ?? 1536);
+    embedder = new OpenAIEmbeddingProvider(openaiKey, model, dims);
+    console.log(`Embedder: OpenAI ${model} (${dims}d)`);
+  } else if (embedderType === "local") {
     embedder = new LocalEmbeddingProvider();
     console.log("Embedder: hash-based (local placeholder)");
   } else {
     console.log("Embedder: all-MiniLM-L6-v2 (loading model...)");
     try {
       embedder = new TransformerEmbeddingProvider(dataDir);
-      // Warm up — triggers model download on first run
       await embedder.embed("warmup");
       console.log("Embedder: all-MiniLM-L6-v2 (ready)");
     } catch (err) {
       console.error("Failed to load transformer model, falling back to hash-based:", err);
       embedder = new LocalEmbeddingProvider();
     }
+  }
+
+  // Initialize storage — PostgreSQL (cloud) or SQLite (local)
+  let store: StorageAdapter;
+  const dbUrl = process.env.DATABASE_URL;
+
+  if (dbUrl) {
+    store = new PgStore({ connectionString: dbUrl, dimensions: embedder.dimensions() });
+    console.log("Storage: PostgreSQL + pgvector");
+  } else {
+    store = new SqliteStore(dataDir, embedder.dimensions());
+    console.log("Storage: SQLite + sqlite-vec");
+  }
+  await store.init();
+
+  // Database management commands
+  if (mode === "db:reset") {
+    console.log("Resetting database — dropping all tables and recreating...");
+    await store.reset();
+    console.log("Database reset complete. All tables recreated with default data.");
+    process.exit(0);
+  }
+
+  if (mode === "db:seed") {
+    console.log("Seeding default data...");
+    await store.seed();
+    console.log("Seed complete — local user + system categories created.");
+    process.exit(0);
   }
 
   if (mode === "mcp") {
@@ -47,40 +86,27 @@ async function main() {
     // HTTP mode — REST API with auth
     const apiKeyRequired = process.env.PONDER_API_KEY_REQUIRED !== "false";
 
-    // Auto-generate API key on first start
+    // Auto-generate default API key on first start (for MCP/SDK/CLI use)
     if (apiKeyRequired) {
-      const keyCount = await store.countApiKeys();
+      const keyCount = await store.countApiKeys("local");
       if (keyCount === 0) {
-        const { rawKey } = await store.createApiKey("default");
-        console.log("\n  ┌─────────────────────────────────────────────────────┐");
-        console.log("  │                                                     │");
-        console.log("  │  Your API key (save this — shown only once):        │");
-        console.log(`  │  ${rawKey}  │`);
-        console.log("  │                                                     │");
-        console.log("  │  Use: Authorization: Bearer <key>                   │");
-        console.log("  │  Or:  PONDER_API_KEY=<key> in .env                  │");
-        console.log("  │                                                     │");
-        console.log("  └─────────────────────────────────────────────────────┘\n");
+        await store.createApiKey("default", "local");
+        console.log("  Default API key created. Manage keys from the dashboard.");
       }
     }
 
     const app = createApp({ store, embedder, apiKeyRequired });
 
-    const server = serve({ fetch: app.fetch, port, hostname: host }, () => {
+    serve({ fetch: app.fetch, port, hostname: host }, () => {
       console.log(`PonderDB server running at http://${host}:${port}`);
       console.log(`Data directory: ${dataDir}`);
       console.log(`Auth: ${apiKeyRequired ? "enabled" : "disabled"}`);
     });
 
-    // Graceful shutdown — close HTTP server then DB
+    // Shutdown — exit immediately on Ctrl+C (PG pool.end() can hang)
     const shutdown = () => {
       console.log("\nShutting down...");
-      server.close(async () => {
-        await store.close();
-        process.exit(0);
-      });
-      // Force exit after 3s if server won't close
-      setTimeout(() => process.exit(0), 3000);
+      process.exit(0);
     };
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
