@@ -18,10 +18,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
           registry-url: https://registry.npmjs.org
 
-      - run: npm ci
+      - run: rm -rf node_modules package-lock.json && npm install
 
       # Determine version bump type from commit messages
       # "feat:" = minor, "fix:" = patch, "BREAKING CHANGE" = major
