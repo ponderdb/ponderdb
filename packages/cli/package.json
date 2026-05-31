@@ -20,7 +20,7 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@ponderdb/sdk": "0.2.2",
+    "@ponderdb/sdk": "0.2.1",
     "commander": "^13.1.0"
   },
   "devDependencies": {
