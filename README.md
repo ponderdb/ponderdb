@@ -37,11 +37,14 @@ AI tools forget everything between sessions. You re-explain your architecture, c
 PonderDB gives **all** your AI tools a shared, persistent memory. One server, every tool remembers.
 
 ```
-Claude ──┐
-Cursor ──┤
-Copilot ─┤──▶ PonderDB ──▶ SQLite (local) ──▶ Your memories, searchable by meaning
-Gemini ──┤
-ChatGPT ─┘
+Claude ──────┐
+Cursor ──────┤
+Copilot ─────┤
+Gemini ──────┤──▶ PonderDB ──▶ SQLite (local) ──▶ Your memories, searchable by meaning
+ChatGPT ─────┤
+VS Code ext ─┤
+Chrome ext ──┤
+Python/Node ─┘
 ```
 
 ### Key Features
@@ -57,6 +60,9 @@ ChatGPT ─┘
 - **Secure by default** — API key auth for REST API, auto-generated on first start
 - **MCP native** — Works with any MCP-compatible tool out of the box (stdio + HTTP)
 - **Web dashboard** — Browse memories, manage projects, categories, API keys at `localhost:7437`
+- **VS Code extension** — Sidebar panel with search, memory tree, and connection status
+- **Browser extension** — Right-click any text on any webpage to save as memory
+- **Python SDK** — Full-featured Python client (`pip install ponderdb`)
 
 ---
 
@@ -425,6 +431,8 @@ All endpoints require `Authorization: Bearer pndr_xxx` header (unless auth is di
 | `PUT` | `/api/memories/:key` | Update a memory |
 | `DELETE` | `/api/memories/:key` | Delete a memory |
 | `POST` | `/api/memories/search` | Semantic + keyword search |
+| `POST` | `/api/memories/history` | Get version history for a memory |
+| `POST` | `/api/memories/restore` | Restore memory to a previous version |
 | `POST` | `/api/auth/keys` | Generate new API key |
 | `GET` | `/api/auth/keys` | List API keys |
 | `DELETE` | `/api/auth/keys/:id` | Revoke an API key |
@@ -479,33 +487,54 @@ curl -X DELETE -H "Authorization: Bearer $API_KEY" \
 ## CLI
 
 ```bash
-# Set API key (or pass --api-key flag)
+# Set API key
 export PONDER_API_KEY=pndr_YOUR_KEY
 export PONDER_URL=http://127.0.0.1:7437  # default
 
-# Store a memory
-ponder remember "auth/jwt-config" "JWT uses RS256, 15min expiry" \
-  --category config --tags auth,jwt
-
-# Recall by key
+# Core operations
+ponder remember "auth/jwt-config" "JWT uses RS256, 15min expiry" --tags auth,jwt
 ponder recall "auth/jwt-config"
-
-# Semantic search
 ponder search "how does authentication work" --limit 5
-
-# List memories
 ponder list --category architecture --limit 20
-
-# Delete
+ponder update "auth/jwt-config" --content "RS256, 30min expiry" --tags auth,jwt,updated
 ponder forget "auth/jwt-config"
 
-# Server stats
+# Version history
+ponder history "auth/jwt-config"
+ponder restore "auth/jwt-config" 2
+
+# Export
+ponder export --format markdown --output backup.md
+ponder export --project my-api --format json -o api-memories.json
+
+# Projects
+ponder projects list
+ponder projects create "My API" --slug my-api
+ponder projects delete <id>
+
+# Categories & API keys
+ponder categories
+ponder keys list
+ponder keys create "laptop"
+
+# Import & server info
+ponder import CLAUDE.md --project my-api
+ponder import .cursorrules --dry-run
 ponder stats
+ponder --version
 ```
+
+See [CLI README](packages/cli/README.md) for full command reference.
 
 ---
 
-## SDK
+## SDKs
+
+### TypeScript / Node.js
+
+```bash
+npm install @ponderdb/sdk
+```
 
 ```typescript
 import { PonderClient } from "@ponderdb/sdk";
@@ -513,35 +542,58 @@ import { PonderClient } from "@ponderdb/sdk";
 const ponder = new PonderClient({
   baseUrl: "http://127.0.0.1:7437",
   apiKey: "pndr_YOUR_KEY",
-  projectId: "my-backend-api",  // optional — scopes all operations
+  projectId: "my-backend-api",
 });
 
-// Store
-await ponder.remember({
-  key: "auth/jwt-config",
-  content: "JWT uses RS256 with 15min expiry",
-  category: "config",
-  tags: ["auth", "jwt"],
-});
+await ponder.remember({ key: "auth/jwt", content: "RS256, 15min expiry" });
+const memory = await ponder.recall("auth/jwt");
+const results = await ponder.search({ query: "authentication", limit: 5 });
+await ponder.update("auth/jwt", { content: "RS256, 30min expiry" });
+const hist = await ponder.history("auth/jwt");
+await ponder.restore("auth/jwt", 1);
+await ponder.forget("auth/jwt");
 
-// Recall
-const memory = await ponder.recall("auth/jwt-config");
-
-// Search
-const results = await ponder.search({
-  query: "authentication setup",
-  limit: 5,
-});
-
-// List
-const list = await ponder.list({
-  category: "architecture",
-  sortBy: "updatedAt",
-});
-
-// Delete
-await ponder.forget("auth/jwt-config");
+// Projects, categories, API keys
+await ponder.listProjects();
+await ponder.createProject("My API");
+await ponder.listCategories();
+await ponder.listApiKeys();
 ```
+
+See [SDK README](packages/sdk/README.md) for full API reference.
+
+### Python
+
+```bash
+pip install ponderdb
+```
+
+```python
+from ponderdb import PonderClient
+
+client = PonderClient(
+    base_url="http://127.0.0.1:7437",
+    api_key="pndr_YOUR_KEY",
+    project_id="my-backend-api",
+)
+
+client.remember("auth/jwt", "RS256, 15min expiry", tags=["auth"])
+memory = client.recall("auth/jwt")
+results = client.search("authentication", limit=5)
+client.update("auth/jwt", content="RS256, 30min expiry")
+client.history("auth/jwt")
+client.restore("auth/jwt", version=1)
+client.forget("auth/jwt")
+
+# Projects, categories, API keys
+client.list_projects()
+client.create_project("My API", slug="my-api")
+client.list_categories()
+client.list_api_keys()
+client.export(project_id="my-api")
+```
+
+See [Python SDK README](packages/python-sdk/README.md) for full API reference.
 
 ---
 
@@ -550,16 +602,19 @@ await ponder.forget("auth/jwt-config");
 ```
 ponderdb/
 ├── packages/
-│   ├── core/           — Types, interfaces, storage abstractions, utilities
-│   ├── sqlite-store/   — SQLite + sqlite-vec storage adapter (local mode)
-│   ├── pg-store/       — PostgreSQL + pgvector storage adapter (cloud mode)
-│   ├── server/         — Hono REST API + MCP server (stdio + HTTP)
-│   ├── dashboard/      — React + Vite web dashboard
-│   ├── sdk/            — TypeScript client SDK
-│   ├── python-sdk/     — Python client SDK
-│   └── cli/            — Terminal interface (ponder command)
-├── research/           — Design documents and architecture research
-└── assets/             — Logo and branding
+│   ├── core/                — Types, interfaces, storage abstractions, utilities
+│   ├── sqlite-store/        — SQLite + sqlite-vec storage adapter (local mode)
+│   ├── pg-store/            — PostgreSQL + pgvector storage adapter (cloud mode)
+│   ├── server/              — Hono REST API + MCP server (stdio + HTTP)
+│   ├── dashboard/           — React + Vite web dashboard
+│   ├── sdk/                 — TypeScript client SDK
+│   ├── python-sdk/          — Python client SDK
+│   ├── cli/                 — Terminal interface (ponder command)
+│   ├── vscode-extension/    — VS Code sidebar panel + commands
+│   └── browser-extension/   — Chrome extension (right-click save)
+├── deploy/                  — Docker, Nginx, PM2, CI/CD configs
+├── research/                — Design documents and architecture research
+└── assets/                  — Logo and branding
 ```
 
 ### How It Works
@@ -681,7 +736,7 @@ npm run clean        # Remove build artifacts
 - [x] Global memories (`isGlobal` — accessible across all projects)
 - [x] Custom styled dashboard (full-width layout, custom dropdowns, setup screen)
 - [x] OpenAI embedding support (`text-embedding-3-small` via API)
-- [ ] npm publish (`@ponderdb/server`, `@ponderdb/cli`, `@ponderdb/sdk`)
+- [x] npm publish (`@ponderdb/server`, `@ponderdb/cli`, `@ponderdb/sdk`)
 
 ### Phase 2 — Cloud (in progress)
 - [x] Multi-user data model (User type, `userId` scoping on projects + API keys)
@@ -696,9 +751,11 @@ npm run clean        # Remove build artifacts
 ### Phase 3 — Polish ✅
 - [x] Memory versioning and history (auto-snapshot on update, restore to any version)
 - [x] Import from CLAUDE.md, .cursorrules, etc. (parse + import via API/CLI/MCP)
-- [x] Python SDK (`pip install ponderdb`)
-- [x] VS Code extension (remember selection, search, list, import)
-- [x] Browser extension (Chrome — right-click save, popup config)
+- [x] Python SDK (`pip install ponderdb`) — full feature parity with Node SDK
+- [x] VS Code extension — sidebar panel (connection status, search, memory tree), inline actions
+- [x] Browser extension (Chrome — right-click save, popup config, PonderDB icons)
+- [x] CLI: 15 commands (remember, recall, search, list, update, forget, history, restore, export, projects, categories, keys, stats, sync, import)
+- [x] Full SDK parity across Node, Python, and CLI
 
 ### Phase 4 — Scale ✅
 - [x] Enterprise features (audit logs, API routes for compliance)
