@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import type { AppDeps } from "../app.js";
+import type { AppDeps, AppEnv } from "../app.js";
 import { ValidationError } from "@ponderdb/core";
 
 export function authRouter(deps: AppDeps) {
-  const router = new Hono();
+  const router = new Hono<AppEnv>();
   const { store } = deps;
 
   // Generate new API key (requires existing valid key)
@@ -12,7 +12,8 @@ export function authRouter(deps: AppDeps) {
     const name = (body as Record<string, unknown>).name;
     if (!name || typeof name !== "string") throw new ValidationError("name is required");
 
-    const { apiKey, rawKey } = await store.createApiKey(name);
+    const userId = c.get("userId") as string || "local";
+    const { apiKey, rawKey } = await store.createApiKey(name, userId);
     return c.json({
       id: apiKey.id,
       name: apiKey.name,
@@ -25,7 +26,8 @@ export function authRouter(deps: AppDeps) {
 
   // List API keys (prefix only, no secrets)
   router.get("/keys", async (c) => {
-    const keys = await store.listApiKeys();
+    const userId = c.get("userId") as string || "local";
+    const keys = await store.listApiKeys(userId);
     return c.json({ keys });
   });
 

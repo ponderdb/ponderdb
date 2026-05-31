@@ -14,6 +14,19 @@ import type {
   Project,
   CreateProjectInput,
   UpdateProjectInput,
+  User,
+  CreateUserInput,
+  UpdateUserInput,
+  MemoryVersion,
+  Team,
+  TeamMember,
+  TeamRole,
+  CreateTeamInput,
+  AuditLogEntry,
+  AuditAction,
+  MarketplaceListing,
+  CreateMarketplaceListingInput,
+  AiSuggestion,
 } from "./types.js";
 
 /** Storage backend interface — implemented by sqlite-store, pg-store, etc. */
@@ -23,6 +36,12 @@ export interface StorageAdapter {
 
   /** Close storage connection */
   close(): Promise<void>;
+
+  /** Drop all tables and recreate schema (destructive) */
+  reset(): Promise<void>;
+
+  /** Seed default data (local user, system categories) */
+  seed(): Promise<void>;
 
   /** Create a new memory */
   create(input: CreateMemoryInput & { embedding?: number[] }): Promise<Memory>;
@@ -54,20 +73,45 @@ export interface StorageAdapter {
   /** Record an access (bump accessedAt + accessCount) */
   recordAccess(id: MemoryId): Promise<void>;
 
+  /** Get version history for a memory */
+  getMemoryHistory(memoryId: MemoryId): Promise<MemoryVersion[]>;
+
+  /** Restore a memory to a specific version */
+  restoreMemoryVersion(memoryId: MemoryId, versionNumber: number): Promise<Memory>;
+
+  // ── Users ──
+
+  /** Create a new user */
+  createUser(input: CreateUserInput): Promise<User>;
+
+  /** Get user by ID */
+  getUserById(id: string): Promise<User | null>;
+
+  /** Get user by email */
+  getUserByEmail(email: string): Promise<User | null>;
+
+  /** Update a user */
+  updateUser(id: string, input: UpdateUserInput): Promise<User>;
+
+  /** List all users */
+  listUsers(): Promise<User[]>;
+
+  // ── API Keys ──
+
   /** Create an API key (store hash, return full key only once) */
-  createApiKey(name: string): Promise<{ apiKey: ApiKey; rawKey: string }>;
+  createApiKey(name: string, userId: string): Promise<{ apiKey: ApiKey; rawKey: string }>;
 
   /** Validate an API key by its raw value, returns key record if valid */
   validateApiKey(rawKey: string): Promise<ApiKey | null>;
 
-  /** List all API keys (without hashes) */
-  listApiKeys(): Promise<ApiKey[]>;
+  /** List API keys for a user */
+  listApiKeys(userId: string): Promise<ApiKey[]>;
 
   /** Delete an API key */
   deleteApiKey(id: string): Promise<boolean>;
 
-  /** Count API keys */
-  countApiKeys(): Promise<number>;
+  /** Count API keys for a user */
+  countApiKeys(userId: string): Promise<number>;
 
   // ── Categories ──
 
@@ -88,20 +132,112 @@ export interface StorageAdapter {
 
   // ── Projects ──
 
-  /** List all projects */
-  listProjects(): Promise<Project[]>;
+  /** List all projects for a user */
+  listProjects(userId: string): Promise<Project[]>;
 
-  /** Get project by slug */
-  getProjectBySlug(slug: string): Promise<Project | null>;
+  /** Get project by slug for a user */
+  getProjectBySlug(slug: string, userId: string): Promise<Project | null>;
 
   /** Create a new project */
-  createProject(input: CreateProjectInput): Promise<Project>;
+  createProject(input: CreateProjectInput & { userId: string }): Promise<Project>;
 
   /** Update a project */
   updateProject(id: string, input: UpdateProjectInput): Promise<Project>;
 
   /** Delete a project and all its memories */
   deleteProject(id: string): Promise<boolean>;
+
+  // ── Teams ──
+
+  /** Create a team */
+  createTeam(input: CreateTeamInput, ownerId: string): Promise<Team>;
+
+  /** Get team by ID */
+  getTeamById(id: string): Promise<Team | null>;
+
+  /** Get team by slug */
+  getTeamBySlug(slug: string): Promise<Team | null>;
+
+  /** List teams for a user */
+  listUserTeams(userId: string): Promise<(Team & { role: TeamRole })[]>;
+
+  /** Add member to team */
+  addTeamMember(teamId: string, userId: string, role: TeamRole): Promise<TeamMember>;
+
+  /** Remove member from team */
+  removeTeamMember(teamId: string, userId: string): Promise<boolean>;
+
+  /** List team members */
+  listTeamMembers(teamId: string): Promise<TeamMember[]>;
+
+  /** Update member role */
+  updateTeamMemberRole(teamId: string, userId: string, role: TeamRole): Promise<TeamMember>;
+
+  /** Delete a team and all its data */
+  deleteTeam(id: string): Promise<boolean>;
+
+  // ── Sync ──
+
+  /** Get changes since a given timestamp (for sync push) */
+  getChangesSince(since: string | null, userId: string): Promise<{
+    memories: Memory[];
+    projects: Project[];
+    categories: Category[];
+  }>;
+
+  /** Apply changes from remote (for sync pull — upsert) */
+  applyRemoteChanges(changes: {
+    memories: Memory[];
+    projects: Project[];
+    categories: Category[];
+    deletedMemoryIds: string[];
+    deletedProjectIds: string[];
+    deletedCategoryIds: string[];
+  }): Promise<void>;
+
+  // ── Audit Logs ──
+
+  /** Record an audit log entry */
+  createAuditLog(entry: Omit<AuditLogEntry, "id" | "createdAt">): Promise<AuditLogEntry>;
+
+  /** Query audit logs */
+  listAuditLogs(filter: {
+    userId?: string;
+    action?: AuditAction;
+    resourceType?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ items: AuditLogEntry[]; total: number }>;
+
+  // ── Marketplace ──
+
+  /** Publish a memory to the marketplace */
+  createMarketplaceListing(input: CreateMarketplaceListingInput & { authorId: string; authorName: string }): Promise<MarketplaceListing>;
+
+  /** List marketplace listings */
+  listMarketplaceListings(filter?: {
+    category?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ items: MarketplaceListing[]; total: number }>;
+
+  /** Get a marketplace listing by ID */
+  getMarketplaceListing(id: string): Promise<MarketplaceListing | null>;
+
+  /** Increment download count */
+  recordMarketplaceDownload(id: string): Promise<void>;
+
+  // ── AI Suggestions ──
+
+  /** Create an AI suggestion */
+  createAiSuggestion(suggestion: Omit<AiSuggestion, "id" | "createdAt" | "dismissed">): Promise<AiSuggestion>;
+
+  /** List suggestions for a user */
+  listAiSuggestions(userId: string): Promise<AiSuggestion[]>;
+
+  /** Dismiss a suggestion */
+  dismissAiSuggestion(id: string): Promise<boolean>;
 }
 
 /** Embedding provider interface */

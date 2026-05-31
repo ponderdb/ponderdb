@@ -60,9 +60,10 @@ export class PonderClient {
   }
 
   async search(query: SearchQuery): Promise<SearchResult[]> {
+    const body = { ...query, projectId: query.projectId ?? this.defaultProjectId };
     const res = await this.fetch<{ results: SearchResult[] }>("/api/memories/search", {
       method: "POST",
-      body: JSON.stringify(query),
+      body: JSON.stringify(body),
     });
     return res.results;
   }
@@ -87,10 +88,132 @@ export class PonderClient {
     });
   }
 
+  async syncPull(since: string | null = null): Promise<{
+    memories: Memory[];
+    projects: unknown[];
+    categories: unknown[];
+    deletedMemoryIds: string[];
+    deletedProjectIds: string[];
+    deletedCategoryIds: string[];
+    syncedAt: string;
+  }> {
+    return this.fetch("/api/sync/pull", {
+      method: "POST",
+      body: JSON.stringify({ since }),
+    });
+  }
+
+  async syncPush(changes: {
+    memories: Memory[];
+    projects: unknown[];
+    categories: unknown[];
+    deletedMemoryIds: string[];
+    deletedProjectIds: string[];
+    deletedCategoryIds: string[];
+  }): Promise<{ ok: boolean; syncedAt: string }> {
+    return this.fetch("/api/sync/push", {
+      method: "POST",
+      body: JSON.stringify(changes),
+    });
+  }
+
+  async syncStatus(): Promise<{
+    totalMemories: number;
+    totalProjects: number;
+    totalCategories: number;
+  }> {
+    return this.fetch("/api/sync/status");
+  }
+
+  async importFile(content: string, source: string, projectId?: string): Promise<{
+    imported: number;
+    skipped: number;
+    memories: { key: string; category: string }[];
+    skippedKeys: string[];
+  }> {
+    return this.fetch("/api/import", {
+      method: "POST",
+      body: JSON.stringify({ content, source, projectId: projectId ?? this.defaultProjectId }),
+    });
+  }
+
+  async importPreview(content: string, source: string): Promise<{
+    count: number;
+    memories: { key: string; category: string; contentLength: number }[];
+  }> {
+    return this.fetch("/api/import/preview", {
+      method: "POST",
+      body: JSON.stringify({ content, source }),
+    });
+  }
+
   async stats(): Promise<{ total: number; version: string }> {
     const health = await this.fetch<{ version: string }>("/health");
     const list = await this.fetch<PaginatedResult<Memory>>("/api/memories?limit=0");
     return { total: list.total, version: health.version };
+  }
+
+  async update(key: string, updates: Record<string, unknown>, projectId?: string): Promise<Memory> {
+    const pid = projectId ?? this.defaultProjectId;
+    const params = pid ? `?projectId=${encodeURIComponent(pid)}` : "";
+    return this.fetch<Memory>(`/api/memories/${encodeURIComponent(key)}${params}`, {
+      method: "PUT",
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async history(key: string, projectId?: string): Promise<{ history: unknown[]; current: Memory }> {
+    return this.fetch("/api/memories/history", {
+      method: "POST",
+      body: JSON.stringify({ key, projectId: projectId ?? this.defaultProjectId }),
+    });
+  }
+
+  async restore(key: string, version: number, projectId?: string): Promise<Memory> {
+    return this.fetch<Memory>("/api/memories/restore", {
+      method: "POST",
+      body: JSON.stringify({ key, version, projectId: projectId ?? this.defaultProjectId }),
+    });
+  }
+
+  async listProjects(): Promise<{ projects: unknown[] }> {
+    return this.fetch("/api/projects");
+  }
+
+  async createProject(name: string, opts?: { slug?: string; description?: string }): Promise<unknown> {
+    return this.fetch("/api/projects", {
+      method: "POST",
+      body: JSON.stringify({ name, ...opts }),
+    });
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    await this.fetch(`/api/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  async listCategories(projectId?: string): Promise<{ categories: unknown[] }> {
+    const pid = projectId ?? this.defaultProjectId;
+    const params = pid ? `?projectId=${encodeURIComponent(pid)}` : "";
+    return this.fetch(`/api/categories${params}`);
+  }
+
+  async listApiKeys(): Promise<{ keys: unknown[] }> {
+    return this.fetch("/api/auth/keys");
+  }
+
+  async createApiKey(name: string): Promise<unknown> {
+    return this.fetch("/api/auth/keys", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async deleteApiKey(id: string): Promise<void> {
+    await this.fetch(`/api/auth/keys/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  async health(): Promise<{ status: string; version: string }> {
+    return this.fetch("/health");
   }
 
   private async fetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {

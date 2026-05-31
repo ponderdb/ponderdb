@@ -17,7 +17,7 @@ export function Projects({ apiKey, currentProjectId, onProjectsChanged }: Projec
   const [deleting, setDeleting] = useState<ProjectInfo | null>(null);
 
   const load = useCallback(() => {
-    if (!apiKey) { setLoading(false); return; }
+    /* proceed — auth handled by cookie or apiKey */
     setError("");
     listProjects(apiKey)
       .then((r) => setProjects(r.projects))
@@ -50,7 +50,7 @@ export function Projects({ apiKey, currentProjectId, onProjectsChanged }: Projec
     }
   };
 
-  if (!apiKey) return <div className="empty"><p>Enter your API key in the sidebar</p></div>;
+  /* auth guard removed — session handles auth */
   if (loading) return <div className="loading">Loading...</div>;
 
   return (
@@ -65,6 +65,15 @@ export function Projects({ apiKey, currentProjectId, onProjectsChanged }: Projec
             + New Project
           </button>
         </div>
+      </div>
+
+      <div className="warning-banner">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          <line x1="12" y1="9" x2="12" y2="13" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+        <span>Set <code>PONDER_PROJECT_ID=your-slug</code> in your MCP config or pass <code>projectId</code> to the SDK. A project ID is required for all operations.</span>
       </div>
 
       {error && <div className="error">{error}</div>}
@@ -101,14 +110,15 @@ export function Projects({ apiKey, currentProjectId, onProjectsChanged }: Projec
           const isActive = p.slug === currentProjectId;
           return (
             <div key={p.id} className={`project-card ${isActive ? "project-card-active" : ""}`}>
-              {isActive && <div className="project-active-badge">Active</div>}
               <div className="project-card-header">
-                <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="category-card-color" style={{ background: isActive ? "var(--accent)" : "var(--text-muted)" }} />
                   <h3 className="project-card-name">{p.name}</h3>
-                  <code className="project-card-slug">{p.slug}</code>
+                  {isActive && <span className="badge badge-active" style={{ fontSize: 9 }}>Active</span>}
                 </div>
                 <span className="project-card-count">{p.memoryCount || 0}</span>
               </div>
+              <code className="project-card-slug">{p.slug}</code>
               {p.description && <p className="project-card-desc">{p.description}</p>}
               <div className="project-card-meta">
                 <span>{p.categoryCount || 0} custom categories</span>
@@ -135,11 +145,7 @@ export function Projects({ apiKey, currentProjectId, onProjectsChanged }: Projec
         })}
       </div>
 
-      {projects.length > 0 && (
-        <div style={{ marginTop: 24, padding: 16, background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius)", fontSize: 13, color: "var(--text-secondary)" }}>
-          <strong>Usage:</strong> Set <code>PONDER_PROJECT_ID=your-slug</code> in your MCP config or pass <code>projectId</code> to the SDK. A project ID is required for all operations.
-        </div>
-      )}
+      {/* usage warning moved to top */}
     </div>
   );
 }

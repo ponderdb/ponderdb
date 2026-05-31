@@ -22,6 +22,33 @@ export function memoriesRouter(deps: AppDeps) {
     return c.json(result);
   });
 
+  // Get memory history
+  router.post("/history", async (c) => {
+    const body = await c.req.json();
+    if (!body.key) throw new ValidationError("key is required");
+
+    const projectId = body.projectId;
+    const memory = await store.getByKey(body.key, projectId);
+    if (!memory) return c.json({ error: { code: "MEMORY_NOT_FOUND", message: `Memory not found: ${body.key}` } }, 404);
+
+    const history = await store.getMemoryHistory(memory.id);
+    return c.json({ history, current: memory });
+  });
+
+  // Restore memory version
+  router.post("/restore", async (c) => {
+    const body = await c.req.json();
+    if (!body.key) throw new ValidationError("key is required");
+    if (body.version === undefined) throw new ValidationError("version is required");
+
+    const projectId = body.projectId;
+    const memory = await store.getByKey(body.key, projectId);
+    if (!memory) return c.json({ error: { code: "MEMORY_NOT_FOUND", message: `Memory not found: ${body.key}` } }, 404);
+
+    const restored = await store.restoreMemoryVersion(memory.id, body.version);
+    return c.json(restored);
+  });
+
   // Search memories
   router.post("/search", async (c) => {
     const body = await c.req.json();
@@ -85,6 +112,7 @@ export function memoriesRouter(deps: AppDeps) {
       tags: body.tags,
       metadata: body.metadata,
       projectId: body.projectId,
+      isGlobal: body.isGlobal,
       embedding,
     });
 

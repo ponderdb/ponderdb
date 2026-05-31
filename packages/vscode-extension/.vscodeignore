@@ -1,0 +1,13 @@
+**/**
+!dist/**
+!media/**
+!package.json
+!icon.png
+!README.md
+!LICENSE
+.git
+.env*
+*.ts
+tsconfig.json
+node_modules/**
+src/**
