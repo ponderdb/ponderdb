@@ -15,8 +15,13 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
-      - run: npm run build
+      - run: rm -f package-lock.json && npm install
+      - name: Build in dependency order
+        run: |
+          npm run build -w @ponderdb/core
+          npm run build -w @ponderdb/sqlite-store -w @ponderdb/pg-store -w @ponderdb/sdk
+          npm run build -w @ponderdb/server -w @ponderdb/cli
+          npm run build --workspaces --if-present
       - run: npm run lint
 
   deploy:

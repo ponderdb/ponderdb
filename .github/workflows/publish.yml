@@ -21,7 +21,7 @@ jobs:
           cache: npm
           registry-url: https://registry.npmjs.org
 
-      - run: npm ci
+      - run: rm -f package-lock.json && npm install
 
       # Determine version bump type from commit messages
       # "feat:" = minor, "fix:" = patch, "BREAKING CHANGE" = major
