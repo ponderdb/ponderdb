@@ -8,7 +8,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
+    "build": "npm run build -w @ponderdb/core && npm run build -w @ponderdb/sqlite-store -w @ponderdb/pg-store -w @ponderdb/sdk && npm run build -w @ponderdb/server -w @ponderdb/cli && npm run build --workspaces --if-present",
     "dev": "npm run dev --workspace=@ponderdb/server",
     "test": "npm run test --workspaces --if-present",
     "lint": "eslint \"packages/*/src/**/*.{ts,tsx}\"",
